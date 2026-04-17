@@ -64,7 +64,7 @@ else:
     st.sidebar.info("尚未生成任何報告")
 # --- 3.5 自動計算平均電費 (模糊搜尋分頁版) ---
     avg_price_auto = 5.0
-    if uploaded_global is not None:
+    if st.session_state.get('global_excel') is not None:
             try:
                 # 1. 先抓出這份 Excel 所有的分頁名稱
                 all_sheets = pd.ExcelFile(uploaded_global).sheet_names
