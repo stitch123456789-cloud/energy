@@ -70,18 +70,16 @@ age_filter = st.sidebar.selectbox("選擇變壓器齡篩選：", ["顯示全部"
 # --- 修改後的第 70 行 ---
 # --- 在 p1_變壓器分析.py 中 ---
 
-# --- 在 p1_變壓器分析.py 中修改 ---
+# 1. 從口袋拿值，如果還沒算出來就用 5.0
+val_from_app = st.session_state.get('auto_avg_price', 5.00)
 
-# 1. 嘗試從「公用口袋」拿 app.py 算好的值，拿不到就用 5.0
-current_avg_price = st.session_state.get('auto_avg_price', 5.0)
-
-# 2. 將這個值放入輸入框中
+# 2. 修改輸入框的 value 參數
 electricity_price = st.sidebar.number_input(
-    "請輸入平均電費 (元/度)", 
+    "請輸入平均電費 (元/度)：", 
     min_value=0.0, 
-    value=float(current_avg_price), # 自動帶入 4.35 或其他計算結果
+    value=float(val_from_app), # 關鍵：讓預設值等於自動計算的結果
     step=0.01,
-    key="elec_price_input" # 加入 key 確保切換時會刷新
+    key="final_linked_elec"     # 給它一個唯一的 key
 )
 
 # --- 通用工具函數 ---
