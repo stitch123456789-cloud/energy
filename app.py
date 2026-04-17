@@ -62,9 +62,7 @@ if st.session_state['report_warehouse']:
         st.rerun()
 else:
     st.sidebar.info("尚未生成任何報告")
-# --- 3.5 自動計算平均電費 (精準座標版) ---
-st.sidebar.markdown("### 🔍 數據監控中心")
-
+# --- 3.5 自動計算平均電費 (最終精簡版) ---
 avg_price_auto = 5.0
 current_file = st.session_state.get('global_excel')
 
@@ -74,38 +72,21 @@ if current_file is not None:
         target_sheet = [s for s in all_sheets if "表五之二" in s]
         
         if target_sheet:
-            # 💡 關鍵：我們讀取整張表，不設標題
             df_raw = pd.read_excel(current_file, sheet_name=target_sheet[0], header=None)
+            # 精準座標：L22(21, 11) 和 O22(21, 14)
+            val_kwh = df_raw.iloc[21, 11] 
+            val_fee = df_raw.iloc[21, 14] 
             
-            # 根據你的 Excel 截圖：
-            # 列號 22 (在 Python index 是 21)
-            # L 欄是第 12 欄 (index 11) -> 合計度數
-            # O 欄是第 15 欄 (index 14) -> 合計金額
+            total_kwh = float(str(val_kwh).replace(',', '').strip())
+            total_fee = float(str(val_fee).replace(',', '').strip())
             
-            try:
-                # 抓取 L22 和 O22
-                val_kwh = df_raw.iloc[21, 11] # L 欄
-                val_fee = df_raw.iloc[21, 14] # O 欄
-                
-                # 清理數據 (轉成字串 -> 刪除逗號 -> 轉數字)
-                total_kwh = float(str(val_kwh).replace(',', '').strip())
-                total_fee = float(str(val_fee).replace(',', '').strip())
-                
-                if total_kwh > 0:
-                    avg_price_auto = round(total_fee / total_kwh, 2)
-                    st.sidebar.metric("✅ 座標抓取成功", f"{avg_price_auto} 元/度")
-                    st.sidebar.write(f"度數(L22): {total_kwh}")
-                    st.sidebar.write(f"金額(O22): {total_fee}")
-                else:
-                    st.sidebar.error("❌ L22 數值為 0，無法計算")
-            except Exception as coord_err:
-                st.sidebar.error(f"❌ 座標抓取失敗: {coord_err}")
-                st.sidebar.write("請確認合計是否在第 22 列，L 欄與 O 欄")
-        else:
-            st.sidebar.error("❌ 找不到『表五之二』分頁")
-    except Exception as e:
-        st.sidebar.error(f"❌ 系統錯誤: {e}")
+            if total_kwh > 0:
+                avg_price_auto = round(total_fee / total_kwh, 2)
+    except:
+        # 出錯時不干擾使用者，默默維持預設值 5.0
+        pass
 
+# 存入 Session State 供 p1_變壓器分析.py 使用
 st.session_state['auto_avg_price'] = avg_price_auto
 
 # --- 4. 轉接器邏輯 (同樣垂直對齊到最左邊或上一層) ---
