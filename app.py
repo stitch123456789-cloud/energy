@@ -77,7 +77,7 @@ if 'global_excel' in st.session_state and st.session_state['global_excel'] is no
                 k = float(str(e.get('total_kwh', '0')).replace(',', ''))
                 total_f += f
                 total_k += k
-            if total_k > 0:
+        if total_k > 0:
                 avg_price_auto = round(total_f / total_k, 2)
     except:
         pass
