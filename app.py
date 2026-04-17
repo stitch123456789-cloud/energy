@@ -63,20 +63,36 @@ if st.session_state['report_warehouse']:
 else:
     st.sidebar.info("尚未生成任何報告")
 # --- 3.5 自動計算平均電費 (連動邏輯) ---
+# 這裡需要引入 fetch_exact_data，或者確保它在 app.py 裡可以被呼叫
+# 由於 fetch_exact_data 定義在 p2_用戶簡介.py，我們直接在這裡寫一個簡易版抓取邏輯
+
 avg_price_auto = 5.0
-if st.session_state.get('global_excel') is not None:
+if uploaded_global is not None:
     try:
-        _, elecs = fetch_exact_data()
-        if elecs:
-            total_f = sum([float(str(e.get('total_fee', '0')).replace(',', '')) for e in elecs])
-            total_k = sum([float(str(e.get('total_kwh', '0')).replace(',', '')) for e in elecs])
-            if total_k > 0:
-                avg_price_auto = round(total_f / total_k, 2)
-    except:
+        # 讀取 Excel 的表五之二
+        df_52 = pd.read_excel(uploaded_global, sheet_name="表五之二", skipfooter=1)
+        # 確保欄位名稱正確 (請根據你的 Excel 欄位微調，例如 '年用電量(度)' 和 '年用電金額(元)')
+        # 這裡假設你的 fetch_exact_data 邏輯是加總所有電號
+        total_kwh = 0
+        total_fee = 0
+        
+        # 嘗試抓取關鍵欄位 (度數與金額)
+        # 備註：這裡的欄位名稱必須跟你的 Excel 一模一樣
+        kwh_col = [c for c in df_52.columns if '度' in c and '年' in c][0]
+        fee_col = [c for c in df_52.columns if '元' in c and '年' in c][0]
+        
+        total_kwh = df_52[kwh_col].replace({',':''}, regex=True).astype(float).sum()
+        total_fee = df_52[fee_col].replace({',':''}, regex=True).astype(float).sum()
+        
+        if total_kwh > 0:
+            avg_price_auto = round(total_fee / total_kwh, 2)
+    except Exception as e:
+        # 如果抓不到表五之二，就不動，維持 5.0
         pass
 
-# 將算好的電費存入 session_state，讓 p1_變壓器分析.py 可以直接用
+# 核心關鍵：存入 session_state，讓 p1 抓取
 st.session_state['auto_avg_price'] = avg_price_auto
+
 # --- 4. 轉接器邏輯 (根據選單執行對應檔案) ---
 if mode == "1. 變壓器效益分析":
     try:
