@@ -62,49 +62,58 @@ if st.session_state['report_warehouse']:
         st.rerun()
 else:
     st.sidebar.info("尚未生成任何報告")
-# --- 3.5 自動計算平均電費 (SessionState 修正版) ---
+# --- 3.5 自動計算平均電費 (地毯式搜索版) ---
 avg_price_auto = 5.0
-# 關鍵：改用 session_state 抓檔案，因為 file_uploader 有設定 key
 current_file = st.session_state.get('global_excel')
 
 if current_file is not None:
     try:
-        # 1. 先抓出這份 Excel 所有的分頁名稱
+        # 1. 抓取分頁
         all_sheets = pd.ExcelFile(current_file).sheet_names
-        
-        # 2. 尋找名字裡包含 "表五之二" 的分頁
         target_sheet = [s for s in all_sheets if "表五之二" in s]
         
         if target_sheet:
-            sheet_to_read = target_sheet[0]
-            # 讀取數據
-            df_52 = pd.read_excel(current_file, sheet_name=sheet_to_read)
+            # 💡 讀取時不設 header，讓程式自己找
+            df_raw = pd.read_excel(current_file, sheet_name=target_sheet[0], header=None)
             
-            # 3. 自動辨識度數與金額欄位
-            k_cols = [c for c in df_52.columns if '合計' in str(c)]
-            f_cols = [c for c in df_52.columns if '總電費' in str(c)]
+            # 2. 找到「合計」那一行在哪裡
+            # 我們在整張表中尋找包含「合計」字眼的儲存格
+            total_row_index = df_raw[df_raw.apply(lambda row: row.astype(str).str.contains('合計').any(), axis=1)].index
             
-            if k_cols and f_cols:
-                # 使用 pd.to_numeric 確保數據乾淨
-                # 我們取第 14 行 (index 13)，也就是合計那一列
-                val_kwh = df_52[k_cols[0]].iloc[13]
-                val_fee = df_52[f_cols[0]].iloc[13]
+            if not total_row_index.empty:
+                target_row = df_raw.iloc[total_row_index[0]]
                 
-                # 清理文字與符號
-                total_kwh = float(str(val_kwh).replace(',', ''))
-                total_fee = float(str(val_fee).replace(',', ''))
+                # 3. 在這一行裡面找「數字」
+                # 通常合計列會有：1月, 2月... 合計(數字), 平均(數字)
+                # 我們把這行的數字都抓出來，通常倒數第二個大的數字就是合計度數，最後一個是金額
+                numeric_values = []
+                for val in target_row:
+                    try:
+                        clean_val = float(str(val).replace(',', '').strip())
+                        if clean_val > 100: # 避開月份或小數字
+                            numeric_values.append(clean_val)
+                    except:
+                        continue
                 
-                if total_kwh > 0:
-                    avg_price_auto = round(total_fee / total_kwh, 2)
-                    st.sidebar.success(f"📈 自動計算電費：{avg_price_auto} 元/度")
+                # 根據表五之二格式：度數合計通常在金額合計前面
+                if len(numeric_values) >= 2:
+                    # 在你的表中，合計度數約 900萬，合計電費約 4000萬
+                    # 我們取最後兩個有效大數字
+                    total_fee = numeric_values[-1]
+                    total_kwh = numeric_values[-2]
+                    
+                    if total_kwh > 0:
+                        avg_price_auto = round(total_fee / total_kwh, 2)
+                        st.sidebar.success(f"📈 自動計算電費：{avg_price_auto} 元/度")
+            else:
+                st.sidebar.warning("⚠️ 在表中找不到『合計』字樣")
         else:
             st.sidebar.warning("⚠️ 找不到『表五之二』分頁")
             
     except Exception as e:
-        # 這裡會顯示具體的錯誤原因
-        st.sidebar.error(f"❌ 計算過程出錯: {e}")
+        st.sidebar.error(f"❌ 讀取出錯: {e}")
 
-# 存入口袋
+# 存入口袋供 p1 使用
 st.session_state['auto_avg_price'] = avg_price_auto
 
 # --- 4. 轉接器邏輯 (同樣垂直對齊到最左邊或上一層) ---
