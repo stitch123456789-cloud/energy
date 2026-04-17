@@ -145,9 +145,11 @@ if elec_systems:
             elec_systems[i]['peak_max'] = c3.text_input("尖峰最高需量", elec_systems[i]['peak_max'], key=f"p_max_{i}")
             elec_systems[i]['offpeak_max'] = c3.text_input("離峰最高需量", elec_systems[i]['offpeak_max'], key=f"o_max_{i}")
 
-# --- 4. 封裝 Word 生成邏輯 ---
+# --- 4. 封裝 Word 生成邏輯 (標題唯一化 + 自動存入倉庫版) ---
 def generate_docx(comp, area, air, emp, hours, date, elecs):
     doc = Document()
+    
+    # 1. 用戶簡介
     p_t1 = doc.add_paragraph(); set_font_kai(p_t1.add_run("二、能源用戶概述"), is_bold=True)
     p_t2 = doc.add_paragraph(); set_font_kai(p_t2.add_run("  2-1. 用戶簡介"), is_bold=True)
 
@@ -166,17 +168,19 @@ def generate_docx(comp, area, air, emp, hours, date, elecs):
     set_font_kai(p.add_run(date), color=RGBColor(255, 0, 0)) 
     set_font_kai(p.add_run("經由實地查訪貴單位之公用系統使用情形及輔導診斷概述如下："))
 
+    # --- 關鍵修正：1.電力系統 標題只出現一次，且不帶電號 ---
+    doc.add_paragraph() 
+    set_font_kai(doc.add_paragraph().add_run("1. 電力系統"), is_bold=True)
+
+    # 3. 循環生成所有電號表格
     for i, e in enumerate(elecs):
-        doc.add_paragraph()
-        set_font_kai(doc.add_paragraph().add_run(f"1.{i+1} 電力系統 (電號：{e['elec_id']})："), is_bold=True)
         table = doc.add_table(rows=5, cols=3)
         table.style = 'Table Grid'
         
-        # 電號行
+        # 表格內容 (電號、契約等)
         cell_id = table.cell(0, 0); cell_id.merge(table.cell(0, 2))
         set_font_kai(cell_id.paragraphs[0].add_run(f"台電電號：{e['elec_id']}"), size=12, color=RGBColor(255, 0, 0))
 
-        # 內容行
         r1 = table.rows[1].cells
         set_font_kai(r1[0].paragraphs[0].add_run(f"契約型式：高壓 3 段式"), size=12)
         set_font_kai(r1[1].paragraphs[0].add_run(f"契約容量：{e['contract_cap']} [kW]"), size=12)
@@ -199,10 +203,19 @@ def generate_docx(comp, area, air, emp, hours, date, elecs):
 
         for row in table.rows:
             for cell in row.cells: cell.vertical_alignment = 1
+        
+        # 表格間距
+        if i < len(elecs) - 1: doc.add_paragraph()
 
     target_stream = io.BytesIO()
     doc.save(target_stream)
-    return target_stream.getvalue()
+    file_bytes = target_stream.getvalue()
+
+    # --- 關鍵修正：將生成的報告「打包」進倉庫，這樣一鍵打包按鈕才抓得到 ---
+    report_name = f"能源用戶簡介_{comp}.docx"
+    st.session_state['report_warehouse'][report_name] = file_bytes
+    
+    return file_bytes
 
 # --- 5. 下載按鈕 ---
 st.markdown("---")
@@ -212,4 +225,4 @@ if st.download_button(
     file_name=f"能源用戶簡介_{v_comp}.docx",
     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ):
-    st.success("報告生成成功！")
+    st.success("✅ 報告生成成功並已加入打包清單！")
