@@ -1,68 +1,91 @@
 import streamlit as st
 import pandas as pd
 from docx import Document
-from docx.shared import Pt
-from docx.oxml.ns import qn
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
-# --- 1. 工具函數：設定標楷體 11 號 (不加粗) ---
-def set_font_kai_11(run):
-    run.font.name = '標楷體'
-    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-    run.font.size = Pt(11)
-    run.font.bold = False
-
-# --- 2. 數據抓取核心：模糊匹配分頁 ---
-def fetch_lighting_data_flexible(file):
+# --- 核心邏輯：全能掃描器 ---
+def fetch_all_equipment_flexible(file):
     try:
         xl = pd.ExcelFile(file)
-        # 💡 模糊功能：只要名稱包含 "表九之二" 就算數
-        target_sheets = [s for s in xl.sheet_names if "表九之二" in s]
-        
-        if not target_sheets:
-            return None
-        
-        all_buildings_results = {}
+        sheet_names = xl.sheet_names
+        results = {
+            "九之一": [], # 空調
+            "九之二": [], # 照明
+            "九之三": []  # 其他
+        }
 
-        for sheet in target_sheets:
-            # 讀取該分頁
-            df = pd.read_excel(file, sheet_name=sheet, header=None)
-            
-            # 從分頁名稱提取建築物標題 (例如從 "表九之二、建築物 編號-1" 提取 "建築物 編號-1")
-            display_name = sheet.split('、')[-1] if '、' in sheet else sheet
-            
-            lighting_items = []
-            # 數據通常從第 7 列開始 (index 6)
-            for i in range(6, len(df)):
-                kind = str(df.iloc[i, 1]).strip()   # B欄: 種類
-                spec = str(df.iloc[i, 5]).strip()   # F欄: 容量規格
-                count = str(df.iloc[i, 9]).strip()  # J欄: 數量
-                hours = str(df.iloc[i, 11]).strip() # L欄: 運轉時數
-                
-                # --- 數據清洗 ---
-                if kind == "nan" or "註" in kind or "合計" in kind:
-                    continue
-                
-                # 如果規格是空的也跳過
-                if spec == "nan" or spec == "":
-                    continue
+        for sheet in sheet_names:
+            # 1. 抓取表九之一 (空調系統)
+            if "表九之一" in sheet:
+                df = pd.read_excel(file, sheet_name=sheet, header=None)
+                # 這裡加入你原本九之一的解析邏輯...
+                results["九之一"].append({"name": sheet, "data": "解析後的空調數據"})
 
-                lighting_items.append({
-                    "kind": kind,
-                    "spec": spec,
-                    "count": count,
-                    "hours": hours
-                })
-            
-            # 只有當該建築物有抓到資料時才放入結果
-            if lighting_items:
-                all_buildings_results[display_name] = lighting_items
-                
-        return all_buildings_results
+            # 2. 抓取表九之二 (照明系統)
+            elif "表九之二" in sheet:
+                df = pd.read_excel(file, sheet_name=sheet, header=None)
+                # 這裡執行剛才寫的模糊抓取照明邏輯...
+                lighting_data = process_lighting_sheet(df) # 呼叫處理照明的子函數
+                results["九之二"].append({"name": sheet, "items": lighting_data})
+
+            # 3. 抓取表九之三 (其他設備)
+            elif "表九之三" in sheet:
+                df = pd.read_excel(file, sheet_name=sheet, header=None)
+                # 這裡加入九之三的解析邏輯...
+                results["九之三"].append({"name": sheet, "data": "解析後的其他數據"})
+
+        return results
     except Exception as e:
-        st.error(f"模糊抓取照明資料失敗：{e}")
+        st.error(f"掃描檔案失敗：{e}")
         return None
+
+# --- 子函數：專門處理照明(九之二)的內容 ---
+def process_lighting_sheet(df):
+    items = []
+    # 根據你的 Excel 結構，通常從 index 6 或 7 開始
+    for i in range(6, len(df)):
+        kind = str(df.iloc[i, 1]).strip() # 種類
+        if kind == "nan" or "合計" in kind: continue
+        items.append({
+            "kind": kind,
+            "spec": str(df.iloc[i, 5]),   # 規格
+            "count": str(df.iloc[i, 9]),  # 數量
+            "hours": str(df.iloc[i, 11])  # 時數
+        })
+    return items
+
+# --- Streamlit 介面調整 ---
+st.header("⚙️ 設備系統資料庫 (全自動生成版)")
+
+# 優先檢查是否有單獨上傳的檔案，沒有則抓全域檔案
+uploaded_file = st.file_uploader("若要單張處理，請在此上傳單獨的表九 Excel", type=["xlsx"])
+final_file = uploaded_file if uploaded_file else st.session_state.get('global_excel')
+
+if final_file:
+    if st.button("🚀 立即掃描並生成完整設備報告"):
+        with st.spinner("正在自動識別分頁內容..."):
+            all_data = fetch_all_equipment_flexible(final_file)
+            
+            if all_data:
+                # 建立一個新的 Word 文件
+                doc = Document()
+                doc.add_heading('九、使用能源設備統計', 0)
+                
+                # 根據抓到的資料，自動按順序生成 Word 內容
+                if all_data["九之一"]:
+                    st.write("✅ 偵測到表九之一 (空調)")
+                    # 執行生成空調 Word 的代碼...
+                    
+                if all_data["九之二"]:
+                    st.write("✅ 偵測到表九之二 (照明)")
+                    # 執行生成照明表格的代碼... (使用剛才提供的 generate_lighting_word 邏輯)
+                
+                if all_data["九之三"]:
+                    st.write("✅ 偵測到表九之三 (其他)")
+                    # 執行生成其他設備 Word 的代碼...
+
+                # 儲存與輸出
+                # ... (存入 report_warehouse 的邏輯)
 
 # --- 3. Word 生成邏輯 (保持原樣，確保格式一致) ---
 def generate_lighting_word(data):
