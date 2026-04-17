@@ -62,42 +62,42 @@ if st.session_state['report_warehouse']:
         st.rerun()
 else:
     st.sidebar.info("尚未生成任何報告")
-    # --- 3.5 自動計算平均電費 (可視化驗證版) ---
-    avg_price_auto = 5.0
-    if uploaded_global is not None:
-            try:
-                # 1. 讀取 Excel (先不設 skipfooter 看看數據長怎樣)
-                df_52 = pd.read_excel(uploaded_global, sheet_name="表五之二")
-                
-                # 2. 💡 在網頁側邊欄顯示一下我抓到了什麼 (這行是驗證關鍵)
-                st.sidebar.write("🔍 偵測到表五之二欄位：", list(df_52.columns))
+# --- 3.5 自動計算平均電費 (連動邏輯) ---
+avg_price_auto = 5.0
+if uploaded_global is not None:
+    try:
+        # 1. 讀取 Excel 
+        df_52 = pd.read_excel(uploaded_global, sheet_name="表五之二")
+        
+        # 2. 顯示偵測到的欄位 (除錯用)
+        st.sidebar.write("🔍 偵測到表五之二欄位：", list(df_52.columns))
 
-                # 3. 自動辨識度數與金額欄位
-                # 我們找包含 '度' 且包含 '年' 的欄位，以及包含 '元' 且包含 '年' 的欄位
-                k_cols = [c for c in df_52.columns if '度' in str(c) and '年' in str(c)]
-                f_cols = [c for c in df_52.columns if '元' in str(c) and '年' in str(c)]
-                
-                if k_cols and f_cols:
-                    kwh_col = k_cols[0]
-                    fee_col = f_cols[0]
-                    
-                    # 4. 清理數據 (移除逗號並轉數字)
-                    total_kwh = pd.to_numeric(df_52[kwh_col].replace({',':''}, regex=True), errors='coerce').sum()
-                    total_fee = pd.to_numeric(df_52[fee_col].replace({',':''}, regex=True), errors='coerce').sum()
-                    
-                    if total_kwh > 0:
-                        avg_price_auto = round(total_fee / total_kwh, 2)
-                        st.sidebar.info(f"✅ 自動計算成功：{avg_price_auto} 元/度")
-                else:
-                    st.sidebar.warning("⚠️ 找不到對應的『年用電量』或『年電費』欄位")
-                    
-            except Exception as e:
-                st.sidebar.error(f"❌ 讀取表五之二失敗: {e}")
+        # 3. 自動辨識度數與金額欄位
+        k_cols = [c for c in df_52.columns if '度' in str(c) and '年' in str(c)]
+        f_cols = [c for c in df_52.columns if '元' in str(c) and '年' in str(c)]
+        
+        if k_cols and f_cols:
+            kwh_col = k_cols[0]
+            fee_col = f_cols[0]
+            
+            # 4. 清理數據 (移除逗號並轉數字)
+            total_kwh = pd.to_numeric(df_52[kwh_col].replace({',':''}, regex=True), errors='coerce').sum()
+            total_fee = pd.to_numeric(df_52[fee_col].replace({',':''}, regex=True), errors='coerce').sum()
+            
+            if total_kwh > 0:
+                avg_price_auto = round(total_fee / total_kwh, 2)
+                st.sidebar.info(f"✅ 自動計算成功：{avg_price_auto} 元/度")
+        else:
+            st.sidebar.warning("⚠️ 找不到對應的『年用電量』或『年電費』欄位")
+            
+    except Exception as e:
+        # 如果是分頁名稱不對，這裡會顯示錯誤
+        st.sidebar.error(f"❌ 讀取失敗: {e}")
 
-        # 存入 Session State
-        st.session_state['auto_avg_price'] = avg_price_auto
+# 存入 Session State (這一行必須跟 if uploaded_global 垂直對齊)
+st.session_state['auto_avg_price'] = avg_price_auto
 
-# --- 4. 轉接器邏輯 (根據選單執行對應檔案) ---
+# --- 4. 轉接器邏輯 (同樣垂直對齊到最左邊或上一層) ---
 if mode == "1. 變壓器效益分析":
     try:
         exec(open("p1_變壓器分析.py", encoding="utf-8").read())
