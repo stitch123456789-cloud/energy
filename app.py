@@ -32,7 +32,7 @@ st.sidebar.markdown("---")
 # (2) 提案選單
 mode = st.sidebar.radio(
     "請選擇分析項目：", 
-    ["1. 變壓器效益分析", "2. 用戶基本資料"]
+    ["1. 變壓器效益分析", "2. 用戶基本資料", "3. 設備系統資料庫"] # <-- 新增這項
 )
 
 st.sidebar.markdown("---")
@@ -101,3 +101,9 @@ elif mode == "2. 用戶基本資料":
         exec(open("p2_用戶簡介.py", encoding="utf-8").read())
     except FileNotFoundError:
         st.error("找不到 p2_用戶簡介.py")
+
+elif mode == "3. 設備系統資料庫": # <-- 新增這一段
+    try:
+        exec(open("p3_設備資料庫.py", encoding="utf-8").read())
+    except FileNotFoundError:
+        st.error("找不到 p3_設備資料庫.py")
