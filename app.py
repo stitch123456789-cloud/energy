@@ -62,8 +62,8 @@ if st.session_state['report_warehouse']:
         st.rerun()
 else:
     st.sidebar.info("尚未生成任何報告")
-# --- 3.5 自動計算平均電費 (視覺化除錯版) ---
-st.sidebar.markdown("### 🔍 數據監控中心 (測試完後可刪除)")
+# --- 3.5 自動計算平均電費 (精準座標版) ---
+st.sidebar.markdown("### 🔍 數據監控中心")
 
 avg_price_auto = 5.0
 current_file = st.session_state.get('global_excel')
@@ -74,41 +74,38 @@ if current_file is not None:
         target_sheet = [s for s in all_sheets if "表五之二" in s]
         
         if target_sheet:
+            # 💡 關鍵：我們讀取整張表，不設標題
             df_raw = pd.read_excel(current_file, sheet_name=target_sheet[0], header=None)
             
-            # 尋找「合計」列
-            total_row_index = df_raw[df_raw.apply(lambda row: row.astype(str).str.contains('合計').any(), axis=1)].index
+            # 根據你的 Excel 截圖：
+            # 列號 22 (在 Python index 是 21)
+            # L 欄是第 12 欄 (index 11) -> 合計度數
+            # O 欄是第 15 欄 (index 14) -> 合計金額
             
-            if not total_row_index.empty:
-                target_row = df_raw.iloc[total_row_index[0]]
-                # 抓取該行所有數字
-                numeric_values = []
-                for val in target_row:
-                    try:
-                        c_val = float(str(val).replace(',', '').strip())
-                        if c_val > 100: numeric_values.append(c_val)
-                    except: continue
+            try:
+                # 抓取 L22 和 O22
+                val_kwh = df_raw.iloc[21, 11] # L 欄
+                val_fee = df_raw.iloc[21, 14] # O 欄
                 
-                if len(numeric_values) >= 2:
-                    total_fee = numeric_values[-1]
-                    total_kwh = numeric_values[-2]
+                # 清理數據 (轉成字串 -> 刪除逗號 -> 轉數字)
+                total_kwh = float(str(val_kwh).replace(',', '').strip())
+                total_fee = float(str(val_fee).replace(',', '').strip())
+                
+                if total_kwh > 0:
                     avg_price_auto = round(total_fee / total_kwh, 2)
-                    
-                    # 💡 直接在側邊欄印出結果，讓你確認
-                    st.sidebar.metric("計算出的電費單價", f"{avg_price_auto} 元/度")
-                    st.sidebar.write(f"明細：{total_fee}元 / {total_kwh}度")
+                    st.sidebar.metric("✅ 座標抓取成功", f"{avg_price_auto} 元/度")
+                    st.sidebar.write(f"度數(L22): {total_kwh}")
+                    st.sidebar.write(f"金額(O22): {total_fee}")
                 else:
-                    st.sidebar.error("❌ 找不到合計數字")
-            else:
-                st.sidebar.error("❌ 找不到『合計』文字")
+                    st.sidebar.error("❌ L22 數值為 0，無法計算")
+            except Exception as coord_err:
+                st.sidebar.error(f"❌ 座標抓取失敗: {coord_err}")
+                st.sidebar.write("請確認合計是否在第 22 列，L 欄與 O 欄")
         else:
             st.sidebar.error("❌ 找不到『表五之二』分頁")
     except Exception as e:
-        st.sidebar.error(f"❌ 讀取出錯: {e}")
-else:
-    st.sidebar.info("💡 請先上傳 Excel 檔案")
+        st.sidebar.error(f"❌ 系統錯誤: {e}")
 
-# 強制寫入口袋
 st.session_state['auto_avg_price'] = avg_price_auto
 
 # --- 4. 轉接器邏輯 (同樣垂直對齊到最左邊或上一層) ---
