@@ -14,15 +14,23 @@ if 'report_warehouse' not in st.session_state:
     st.session_state['report_warehouse'] = {} # 存放所有產出的報告
 
 # --- 3. 側邊欄：功能選單與全域上傳 ---
-st.sidebar.title("🛠️ 節能診斷工具箱")
+# --- 1. 改成這段新的側邊欄邏輯 ---
+with st.sidebar:
+    st.header("🛠️ 節能診斷工具箱")
+    st.subheader("📂 全域資料庫")
+    
+    # 這裡把 key 改掉，解決報錯問題
+    uploaded_file = st.file_uploader(
+        "上傳完整能源查核 Excel",
+        type=["xlsx"],
+        key="uploader_excel" 
+    )
 
-# (1) 全域 Excel 上傳區
-st.sidebar.subheader("📂 全域資料庫 (全部工作表)")
-uploaded_global = st.sidebar.file_uploader(
-    "上傳完整能源查核 Excel", 
-    type=["xlsx"], 
-    key="global_excel"
-)
+    if uploaded_file is not None:
+        st.session_state['global_excel'] = uploaded_file
+        st.success("✅ 檔案已就緒")
+    else:
+        st.session_state['global_excel'] = None
 
 if uploaded_global:
     st.sidebar.success("✅ 全域檔案已就緒")
