@@ -99,7 +99,7 @@ else:
                 st.sidebar.error(f"❌ 讀取失敗: {e}")
 
         # 存入 Session State
-        st.session_state['auto_avg_price'] = avg_price_auto
+   st.session_state['auto_avg_price'] = avg_price_auto
 
 # --- 4. 轉接器邏輯 (同樣垂直對齊到最左邊或上一層) ---
 if mode == "1. 變壓器效益分析":
