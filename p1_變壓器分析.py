@@ -67,7 +67,16 @@ base_year = st.sidebar.number_input("請輸入基準年份：", value=2026)
 pf_after_input = st.sidebar.number_input("設定【改善後】目標功率因數 (%)：", value=95)
 age_filter = st.sidebar.selectbox("選擇變壓器齡篩選：", ["顯示全部", "超過 10 年", "超過 15 年", "超過 20 年"])
 # 將電費輸入框移至側邊欄 (sidebar)
-electricity_price = st.sidebar.number_input("請輸入平均電費 (元/度)", min_value=0.0, value=5.00, step=0.01)
+# --- 修改後的第 70 行 ---
+# 嘗試從 session_state 抓取 app.py 算好的自動電費，抓不到就用 5.0
+auto_price = st.session_state.get('auto_avg_price', 5.00)
+
+electricity_price = st.sidebar.number_input(
+    "請輸入平均電費 (元/度)", 
+    min_value=0.0, 
+    value=float(auto_price), # 這裡會自動帶入算好的值
+    step=0.01
+)
 
 # --- 通用工具函數 ---
 def set_font_kai(run, size=12, is_bold=False, color=RGBColor(0, 0, 0)):
