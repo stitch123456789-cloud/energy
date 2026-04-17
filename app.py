@@ -62,7 +62,28 @@ if st.session_state['report_warehouse']:
         st.rerun()
 else:
     st.sidebar.info("尚未生成任何報告")
+# --- 3.5 自動計算平均電費 (連動邏輯) ---
+avg_price_auto = 5.0  # 保底預設值
+if 'global_excel' in st.session_state and st.session_state['global_excel'] is not None:
+    try:
+        # 這裡調用你寫好的抓取函數來拿數據
+        _, elecs = fetch_exact_data() 
+        if elecs:
+            total_f = 0.0
+            total_k = 0.0
+            for e in elecs:
+                # 移除千分號並加總
+                f = float(str(e.get('total_fee', '0')).replace(',', ''))
+                k = float(str(e.get('total_kwh', '0')).replace(',', ''))
+                total_f += f
+                total_k += k
+            if total_k > 0:
+                avg_price_auto = round(total_f / total_k, 2)
+    except:
+        pass
 
+# 將算好的電費存入 session_state，讓 p1_變壓器分析.py 可以直接用
+st.session_state['auto_avg_price'] = avg_price_auto
 # --- 4. 轉接器邏輯 (根據選單執行對應檔案) ---
 if mode == "1. 變壓器效益分析":
     try:
