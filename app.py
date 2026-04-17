@@ -64,7 +64,7 @@ else:
     st.sidebar.info("尚未生成任何報告")
     # --- 3.5 自動計算平均電費 (可視化驗證版) ---
     avg_price_auto = 5.0
-        if uploaded_global is not None:
+    if uploaded_global is not None:
             try:
                 # 1. 讀取 Excel (先不設 skipfooter 看看數據長怎樣)
                 df_52 = pd.read_excel(uploaded_global, sheet_name="表五之二")
