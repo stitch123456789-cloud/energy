@@ -6,50 +6,89 @@ from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
-# --- 1. 工具函數：設定標楷體 11 號 (不加粗) ---
+# --- 1. 工具函數：字體設定 ---
 def set_font_kai_11(run):
     run.font.name = '標楷體'
     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
     run.font.size = Pt(11)
     run.font.bold = False
 
-# --- 2. 子函數：專門處理照明(九之二)的內容解析 ---
-def process_lighting_sheet(df):
-    items = []
-    # 根據你的 Excel 結構，通常從 index 6 或 7 開始
-    for i in range(6, len(df)):
-        try:
-            kind = str(df.iloc[i, 1]).strip() # B欄：種類
-            if kind == "nan" or "合計" in kind or "註" in kind: 
-                continue
+def set_font_bold_black_14(run):
+    # 設定黑體 14號 加粗
+    run.font.name = '微軟正黑體'
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), '微軟正黑體')
+    run.font.size = Pt(14)
+    run.font.bold = True
+
+# --- 2. 數據抓取與自動加總邏輯 ---
+def fetch_and_aggregate_lighting(file):
+    try:
+        xl = pd.ExcelFile(file)
+        target_sheets = [s for s in xl.sheet_names if "表九之二" in s]
+        
+        if not target_sheets:
+            return None
+        
+        # 使用字典來做加總，Key 為 (種類, 規格, 時數)
+        aggregated_data = {}
+
+        for sheet in target_sheets:
+            df = pd.read_excel(file, sheet_name=sheet, header=None)
             
-            items.append({
-                "kind": kind,
-                "spec": str(df.iloc[i, 5]),   # F欄：規格
-                "count": str(df.iloc[i, 9]),  # J欄：數量
-                "hours": str(df.iloc[i, 11])  # L欄：時數
-            })
-        except:
-            continue
-    return items
+            # 數據通常從第 7 列 (index 6) 開始
+            for i in range(6, len(df)):
+                kind = str(df.iloc[i, 1]).strip()   # B欄
+                spec = str(df.iloc[i, 5]).strip()   # F欄
+                count_str = str(df.iloc[i, 9]).strip()  # J欄
+                hours_str = str(df.iloc[i, 11]).strip() # L欄
+                
+                # 數據清洗
+                if kind == "nan" or "註" in kind or "合計" in kind: continue
+                if spec == "nan" or spec == "": continue
+                
+                # 去除種類前面的數字 (例如 "1. 日光燈" -> "日光燈")
+                # 使用 split('.') 處理
+                if '.' in kind:
+                    kind = kind.split('.')[-1].strip()
+                
+                try:
+                    count = int(float(count_str.replace(',', '')))
+                    hours = int(float(hours_str.replace(',', '')))
+                except:
+                    continue
 
-# --- 3. Word 生成邏輯 (兩層表頭合併儲存格) ---
-def add_lighting_table_to_doc(doc, b_name, items):
-    # 建築物子標題
-    sub_p = doc.add_paragraph()
-    run_sub = sub_p.add_run(f"({b_name})")
-    set_font_kai_11(run_sub)
+                # 建立唯一 Key
+                key = (kind, spec, hours)
+                
+                if key in aggregated_data:
+                    aggregated_data[key] += count
+                else:
+                    aggregated_data[key] = count
+                    
+        return aggregated_data
+    except Exception as e:
+        st.error(f"數據加總失敗：{e}")
+        return None
 
-    # 建立兩層表頭表格 (4欄)
+# --- 3. Word 生成邏輯 (全域總表) ---
+def generate_aggregated_word(aggregated_data):
+    doc = Document()
+    
+    # 標題：2.照明系統： (黑體 14號 加粗)
+    p = doc.add_paragraph()
+    run_title = p.add_run("2.照明系統：")
+    set_font_bold_black_14(run_title)
+
+    # 建立表格
     table = doc.add_table(rows=2, cols=4)
     table.style = 'Table Grid'
     
-    # 合併儲存格還原圖片格式
-    table.cell(0, 1).merge(table.cell(0, 2)) # 第一列：燈具形式 (跨兩欄)
-    table.cell(0, 0).merge(table.cell(1, 0)) # 第一欄：種類垂直合併
-    table.cell(0, 3).merge(table.cell(1, 3)) # 第四欄：時數垂直合併
-
-    header_cells = [
+    # 合併表頭
+    table.cell(0, 1).merge(table.cell(0, 2))
+    table.cell(0, 0).merge(table.cell(1, 0))
+    table.cell(0, 3).merge(table.cell(1, 3))
+    
+    headers = [
         (table.cell(0, 0), "燈具種類"),
         (table.cell(0, 1), "燈具形式"),
         (table.cell(0, 3), "運轉時數(小時/年)"),
@@ -57,85 +96,50 @@ def add_lighting_table_to_doc(doc, b_name, items):
         (table.cell(1, 2), "數量")
     ]
 
-    for cell, text in header_cells:
+    for cell, text in headers:
         cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_cell = cell.paragraphs[0]
         p_cell.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r = p_cell.add_run(text)
         set_font_kai_11(r)
 
-    # 填入數據內容
-    for item in items:
+    # 填入加總後的數據
+    # 將字典轉回列表並排序（可選，按種類排序）
+    sorted_items = sorted(aggregated_data.items(), key=lambda x: x[0][0])
+
+    for (kind, spec, hours), count in sorted_items:
         row_cells = table.add_row().cells
-        row_data = [item['kind'], item['spec'], item['count'], item['hours']]
+        row_data = [kind, spec, str(count), str(hours)]
         for idx, val in enumerate(row_data):
             cp = row_cells[idx].paragraphs[0]
             cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            clean_txt = str(val).replace('.0', '') if str(val) != "nan" else "-"
-            r = cp.add_run(clean_txt)
+            r = cp.add_run(val)
             set_font_kai_11(r)
+                
+    return doc
 
-# --- 4. 主介面與執行邏輯 ---
-st.header("⚙️ 設備系統資料庫 (全自動融合版)")
+# --- 4. Streamlit 主介面 ---
+st.header("⚙️ 設備系統資料庫 (全域加總版)")
 
-# 優先檢查單獨上傳，否則抓全域
-uploaded_file = st.file_uploader("若要單張處理，請在此上傳單獨的表九 Excel", type=["xlsx"])
-final_file = uploaded_file if uploaded_file else st.session_state.get('global_excel')
+up_file = st.file_uploader("請上傳 Excel (支援多建築物自動合併)", type=["xlsx"])
+final_file = up_file if up_file else st.session_state.get('global_excel')
 
 if final_file:
-    # 唯一的大按鈕
-    if st.button("🚀 立即掃描並下載完整設備報告"):
-        with st.spinner("正在自動識別分頁內容並生成 Word..."):
-            try:
-                xl = pd.ExcelFile(final_file)
-                sheet_names = xl.sheet_names
-                
-                # 初始化 Word
-                doc = Document()
-                # 設定大標題
-                p = doc.add_paragraph()
-                run_title = p.add_run("2.照明系統：")
-                set_font_kai_11(run_title)
-                
-                found_any = False
-                
-                # 遍歷所有分頁進行模糊抓取
-                for sheet in sheet_names:
-                    # --- 處理九之二 (照明) ---
-                    if "表九之二" in sheet:
-                        df = pd.read_excel(final_file, sheet_name=sheet, header=None)
-                        items = process_lighting_sheet(df)
-                        
-                        if items:
-                            # 提取乾淨的建築物名稱
-                            b_name = sheet.split('、')[-1] if '、' in sheet else sheet
-                            # 加入表格到 Word
-                            add_lighting_table_to_doc(doc, b_name, items)
-                            found_any = True
-                            st.write(f"✅ 已解析照明分頁：{sheet}")
-                    
-                    # --- 預留位置給未來的九之一與九之三 ---
-                    # elif "表九之一" in sheet: ...
-                
-                if found_any:
-                    # 輸出下載按鈕
-                    buffer = io.BytesIO()
-                    doc.save(buffer)
-                    st.download_button(
-                        label="📥 點此下載設備系統報告 (.docx)",
-                        data=buffer.getvalue(),
-                        file_name="設備系統報告.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-                    
-                    # 同時存一份到倉庫 (備份用)
-                    if 'report_warehouse' not in st.session_state:
-                        st.session_state['report_warehouse'] = {}
-                    st.session_state['report_warehouse']['設備系統報告'] = buffer.getvalue()
-                else:
-                    st.warning("查無符合的分頁名稱（需含『表九之二』）。")
-                    
-            except Exception as e:
-                st.error(f"執行失敗：{e}")
-else:
-    st.info("請先在側邊欄或上方上傳能源查核 Excel 檔案。")
+    if st.button("🚀 掃描所有建築物並生成唯一總表"):
+        agg_data = fetch_and_aggregate_lighting(final_file)
+        
+        if agg_data:
+            st.success(f"✅ 已完成跨建築物加總！共合併為 {len(agg_data)} 個項目。")
+            
+            doc_obj = generate_aggregated_word(agg_data)
+            buffer = io.BytesIO()
+            doc_obj.save(buffer)
+            
+            st.download_button(
+                label="📥 下載全域照明總表 (.docx)",
+                data=buffer.getvalue(),
+                file_name="照明系統合併報告.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        else:
+            st.error("查無符合的分頁內容。")
