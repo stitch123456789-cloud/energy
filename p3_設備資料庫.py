@@ -115,27 +115,49 @@ def add_lighting_table(doc, lighting_data):
 # --- 5. Streamlit 介面渲染 ---
 st.subheader("⚙️ 設備系統資料庫")
 
-# --- 空調手動輸入區 ---
+# --- 空調手動輸入區 (四欄並列版) ---
 st.markdown("### ❄️ 3. 空調主機開啟模式設定")
-c1, c2, c3, c4 = st.columns(4)
-with c1:
+
+# 建立五欄，第一欄放季節名稱，後面四欄放參數
+c0, c1, c2, c3, c4 = st.columns([0.8, 1.5, 1.2, 1.2, 1.5]) 
+
+with c0:
     st.write("**季節**")
-    st.caption("夏季"); st.caption("春秋"); st.caption("冬季")
-with c2:
+    st.markdown("<br>", unsafe_allow_stdio=True) # 稍微對齊
+    st.caption("夏季"); st.markdown("<br>", unsafe_allow_stdio=True)
+    st.caption("春秋"); st.markdown("<br>", unsafe_allow_stdio=True)
+    st.caption("冬季")
+
+with c1:
     st.write("**主機總容量(RT)**")
-    rt_s = st.number_input("夏季容量", value=600, label_visibility="collapsed")
-    rt_sp = st.number_input("春秋容量", value=450, label_visibility="collapsed")
-    rt_w = st.number_input("冬季容量", value=450, label_visibility="collapsed")
+    rt_s = st.number_input("夏容量", value=600, label_visibility="collapsed", key="rt_s")
+    rt_sp = st.number_input("春容量", value=450, label_visibility="collapsed", key="rt_sp")
+    rt_w = st.number_input("冬容量", value=450, label_visibility="collapsed", key="rt_w")
+
+with c2:
+    st.write("**台數**")
+    ct_s = st.number_input("夏台", value=1, label_visibility="collapsed", key="ct_s")
+    ct_sp = st.number_input("春台", value=1, label_visibility="collapsed", key="ct_sp")
+    ct_w = st.number_input("冬台", value=1, label_visibility="collapsed", key="ct_w")
+
 with c3:
     st.write("**負載率(%)**")
-    ld_s = st.number_input("夏季負載", value=70, label_visibility="collapsed")
-    ld_sp = st.number_input("春秋負載", value=70, label_visibility="collapsed")
-    ld_w = st.number_input("冬季負載", value=60, label_visibility="collapsed")
+    ld_s = st.number_input("夏負", value=70, label_visibility="collapsed", key="ld_s")
+    ld_sp = st.number_input("春負", value=70, label_visibility="collapsed", key="ld_sp")
+    ld_w = st.number_input("冬負", value=60, label_visibility="collapsed", key="ld_w")
+
 with c4:
     st.write("**出水溫度(°C)**")
-    tp_s = st.number_input("夏季溫度", value=7, label_visibility="collapsed")
-    tp_sp = st.number_input("春秋溫度", value=7, label_visibility="collapsed")
-    tp_w = st.number_input("冬季溫度", value=7, label_visibility="collapsed")
+    tp_s = st.number_input("夏溫", value=7, label_visibility="collapsed", key="tp_s")
+    tp_sp = st.number_input("春溫", value=7, label_visibility="collapsed", key="tp_sp")
+    tp_w = st.number_input("冬溫", value=7, label_visibility="collapsed", key="tp_w")
+
+# 重新封裝計算後的數據 (順序要對應 Word 表格)
+ac_rows = [
+    ["夏季", rt_s, ct_s, f"{ld_s}%", round(rt_s*ld_s/100, 1), tp_s],
+    ["春秋", rt_sp, ct_sp, f"{ld_sp}%", round(rt_sp*ld_sp/100, 1), tp_sp],
+    ["冬季", rt_w, ct_w, f"{ld_w}%", round(rt_w*ld_w/100, 1), tp_w]
+]
 
 st.write("**冰機總開啟台數**")
 tc1, tc2, tc3 = st.columns(3)
