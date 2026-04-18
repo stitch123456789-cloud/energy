@@ -50,12 +50,10 @@ def fetch_and_aggregate_lighting(file):
 
 # --- 3. Word 表格生成：空調開啟模式 ---
 def add_ac_mode_table(doc, ac_data):
-    # 標題 3. 空調系統
     p3 = doc.add_paragraph()
     run3 = p3.add_run("3. 空調系統：")
     set_font_kai_bold_14(run3)
 
-    # 標題 (1) 空調主機開啟模式
     p1 = doc.add_paragraph()
     p1.paragraph_format.left_indent = Pt(20)
     run1 = p1.add_run("(1) 空調主機開啟模式：")
@@ -115,64 +113,50 @@ def add_lighting_table(doc, lighting_data):
 # --- 5. Streamlit 介面渲染 ---
 st.subheader("⚙️ 設備系統資料庫")
 
-# --- 空調手動輸入區 (四欄並列版) ---
 st.markdown("### ❄️ 3. 空調主機開啟模式設定")
 
-# 建立五欄，第一欄放季節名稱，後面四欄放參數
+# 建立五欄配置
 c0, c1, c2, c3, c4 = st.columns([0.8, 1.5, 1.2, 1.2, 1.5]) 
 
 with c0:
     st.write("**季節**")
-    st.markdown("<br>", unsafe_allow_stdio=True) # 稍微對齊
-    st.caption("夏季"); st.markdown("<br>", unsafe_allow_stdio=True)
-    st.caption("春秋"); st.markdown("<br>", unsafe_allow_stdio=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("夏季"); st.markdown("<br>", unsafe_allow_html=True)
+    st.caption("春秋"); st.markdown("<br>", unsafe_allow_html=True)
     st.caption("冬季")
 
 with c1:
     st.write("**主機總容量(RT)**")
-    rt_s = st.number_input("夏容量", value=600, label_visibility="collapsed", key="rt_s")
-    rt_sp = st.number_input("春容量", value=450, label_visibility="collapsed", key="rt_sp")
-    rt_w = st.number_input("冬容量", value=450, label_visibility="collapsed", key="rt_w")
+    rt_s = st.number_input("夏量", value=600, label_visibility="collapsed", key="v_rt_s")
+    rt_sp = st.number_input("春量", value=450, label_visibility="collapsed", key="v_rt_sp")
+    rt_w = st.number_input("冬量", value=450, label_visibility="collapsed", key="v_rt_w")
 
 with c2:
     st.write("**台數**")
-    ct_s = st.number_input("夏台", value=1, label_visibility="collapsed", key="ct_s")
-    ct_sp = st.number_input("春台", value=1, label_visibility="collapsed", key="ct_sp")
-    ct_w = st.number_input("冬台", value=1, label_visibility="collapsed", key="ct_w")
+    ct_s = st.number_input("夏台", value=1, label_visibility="collapsed", key="v_ct_s")
+    ct_sp = st.number_input("春台", value=1, label_visibility="collapsed", key="v_ct_sp")
+    ct_w = st.number_input("冬台", value=1, label_visibility="collapsed", key="v_ct_w")
 
 with c3:
     st.write("**負載率(%)**")
-    ld_s = st.number_input("夏負", value=70, label_visibility="collapsed", key="ld_s")
-    ld_sp = st.number_input("春負", value=70, label_visibility="collapsed", key="ld_sp")
-    ld_w = st.number_input("冬負", value=60, label_visibility="collapsed", key="ld_w")
+    ld_s = st.number_input("夏負", value=70, label_visibility="collapsed", key="v_ld_s")
+    ld_sp = st.number_input("春負", value=70, label_visibility="collapsed", key="v_ld_sp")
+    ld_w = st.number_input("冬負", value=60, label_visibility="collapsed", key="v_ld_w")
 
 with c4:
     st.write("**出水溫度(°C)**")
-    tp_s = st.number_input("夏溫", value=7, label_visibility="collapsed", key="tp_s")
-    tp_sp = st.number_input("春溫", value=7, label_visibility="collapsed", key="tp_sp")
-    tp_w = st.number_input("冬溫", value=7, label_visibility="collapsed", key="tp_w")
+    tp_s = st.number_input("夏溫", value=7, label_visibility="collapsed", key="v_tp_s")
+    tp_sp = st.number_input("春溫", value=7, label_visibility="collapsed", key="v_tp_sp")
+    tp_w = st.number_input("冬溫", value=7, label_visibility="collapsed", key="v_tp_w")
 
-# 重新封裝計算後的數據 (順序要對應 Word 表格)
+# 封裝計算後的數據
 ac_rows = [
     ["夏季", rt_s, ct_s, f"{ld_s}%", round(rt_s*ld_s/100, 1), tp_s],
     ["春秋", rt_sp, ct_sp, f"{ld_sp}%", round(rt_sp*ld_sp/100, 1), tp_sp],
     ["冬季", rt_w, ct_w, f"{ld_w}%", round(rt_w*ld_w/100, 1), tp_w]
 ]
 
-st.write("**冰機總開啟台數**")
-tc1, tc2, tc3 = st.columns(3)
-ct_s = tc1.number_input("夏季台數", value=1)
-ct_sp = tc2.number_input("春秋台數", value=1)
-ct_w = tc3.number_input("冬季台數", value=1)
-
-# 計算合計容量
-ac_rows = [
-    ["夏季", rt_s, ct_s, f"{ld_s}%", round(rt_s*ld_s/100, 1), tp_s],
-    ["春秋", rt_sp, ct_sp, f"{ld_sp}%", round(rt_sp*ld_sp/100, 1), tp_sp],
-    ["冬季", rt_w, ct_w, f"{ld_w}%", round(rt_w*ld_w/100, 1), tp_w]
-]
-
-# 檔案上傳
+st.markdown("---")
 up_file = st.file_uploader("請上傳能源查核 Excel", type=["xlsx"])
 final_file = up_file if up_file else st.session_state.get('global_excel')
 
@@ -180,17 +164,16 @@ if final_file:
     if st.button("🚀 生成並下載設備系統報告", use_container_width=True):
         doc = Document()
         
-        # 1. 插入照明系統 (根據你之前編號為 2)
+        # 插入照明系統
         light_data = fetch_and_aggregate_lighting(final_file)
         if light_data:
             add_lighting_table(doc, light_data)
         
-        doc.add_paragraph() # 隔行
+        doc.add_paragraph() 
         
-        # 2. 插入空調系統 (編號為 3)
+        # 插入空調系統
         add_ac_mode_table(doc, ac_rows)
         
-        # 下載
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
