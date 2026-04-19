@@ -19,41 +19,49 @@ def add_run_kai(paragraph, text, size=12, is_bold=False, is_red=False):
         run.font.color.rgb = RGBColor(0, 0, 0)
     return run
 
-# --- 2. Streamlit 介面輸入區 ---
+# --- 2. Streamlit 介面重新排版 ---
 st.title("❄️ P4. 冰水主機汰換效益分析")
 
-col1, col2 = st.columns(2)
-with col1:
+# --- 第一排：橫向三格 ---
+col1_1, col1_2, col1_3 = st.columns(3)
+with col1_1:
     unit_name = st.text_input("單位名稱", value="貴單位")
-    setup_year = st.number_input("原主機設置年份 (民國)", value=104)
-    # 新增：建議更換的主機名稱
-    suggest_ch_name = st.text_input("建議更換主機名稱", value="冰水主機(CH-1)")
-
-with col2:
+with col1_2:
     val_from_app = st.session_state.get('auto_avg_price', 4.48)
     elec_price = st.number_input("平均電費 (元/度)", value=float(val_from_app), step=0.01)
-    # 新增：預期改善後的效率 (kW/RT)
-    target_eff = st.number_input("預期改善後效率 (kW/RT)", value=0.50, step=0.01)
+with col1_3:
+    setup_year = st.number_input("原主機設置年份 (民國)", value=104)
 
+# --- 第二排：現有主機配置 ---
 st.subheader("🧊 現有主機配置")
 df_init = pd.DataFrame([
     {"編號": "CH-1", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"},
     {"編號": "CH-2", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"}
 ])
-chiller_config = st.data_editor(df_init, num_rows="dynamic", use_container_width=True)
+chiller_config = st.data_editor(df_init, num_rows="dynamic", use_container_width=True, key="ch_cfg_editor")
 
+# --- 第三排：橫向二格 (改善後配置參數) ---
+st.subheader("⚙️ 改善後配置參數")
+col2_1, col2_2 = st.columns(2)
+with col2_1:
+    target_eff = st.number_input("預期改善後效率 (kW/RT)", value=0.50, step=0.01)
+with col2_2:
+    suggest_ch_name = st.text_input("建議更換主機名稱", value="冰水主機(CH-1)")
+
+# --- 第四排：運轉參數設定 ---
 st.subheader("📅 運轉參數設定")
-# 自動同步：將畫面上方設定的效率帶入表格的改善後欄位
 op_data = {
     "季節": ["春秋", "夏季", "冬季"],
     "時數(hr/y)": [2190, 1095, 1095],
     "負載率(%)": [60, 70, 50],
     "現況kW/RT": [0.864, 0.90, 0.846],
-    "改善後kW/RT": [target_eff, target_eff, target_eff] # 自動連動
+    "改善後kW/RT": [target_eff, target_eff, target_eff] 
 }
-df_op = st.data_editor(pd.DataFrame(op_data), use_container_width=True)
+df_op = st.data_editor(pd.DataFrame(op_data), use_container_width=True, key="op_cfg_editor")
 
-# --- 3. 核心計算與 Word 生成 ---
+# ---------------------------------------------------------
+# --- 3. 核心計算與 Word 生成 (邏輯維持不變) ---
+# ---------------------------------------------------------
 doc = Document()
 
 # A. 數據預處理
@@ -92,15 +100,15 @@ for _, row in df_op.iterrows():
     add_run_kai(r_cells[4].paragraphs[0], f"{row['時數(hr/y)']:,.0f}", is_red=True)
     add_run_kai(r_cells[5].paragraphs[0], f"{kwh:,.0f}", is_red=True)
 
-# D. 二、改善方案 (新增變數連動)
+# D. 二、改善方案
 doc.add_paragraph()
 add_run_kai(doc.add_paragraph(), "二、改善方案", size=14, is_bold=True)
 p2 = doc.add_paragraph()
 p2.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p2, "建議將舊有")
-add_run_kai(p2, suggest_ch_name, is_red=True) # 變數 1
+add_run_kai(p2, suggest_ch_name, is_red=True)
 add_run_kai(p2, "更換為高效率離心式冰水主機，其運轉效率提升至")
-add_run_kai(p2, f"{target_eff:.2f}", is_red=True) # 變數 2
+add_run_kai(p2, f"{target_eff:.2f}", is_red=True)
 add_run_kai(p2, "kW/RT，預期改善後數據如下表：")
 
 # E. 改善後表格 (t2)
