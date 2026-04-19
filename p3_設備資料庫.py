@@ -123,49 +123,39 @@ def fetch_pump_and_cooling_data(file):
 def fetch_other_systems(file):
     try:
         xl = pd.ExcelFile(file)
-        # 模糊搜尋所有包含「表九之三」的分頁
+        # 模糊搜尋所有包含「表九之三」的分頁 (支援多建築物)
         target_sheets = [s for s in xl.sheet_names if "表九之三" in s]
+        if not target_sheets: return None
         
-        if not target_sheets:
-            return None
-
-        all_other_systems = []
+        all_data = []
         for sheet in target_sheets:
             df = pd.read_excel(file, sheet_name=sheet, header=None)
-            
-            # 從數據行開始讀取（通常是 index 6）
+            # 數據從 index 6 開始 (B欄=1, C欄=2, J欄=9, K欄=10, T欄=19, X欄=23)
             for i in range(6, len(df)):
-                sys_raw = str(df.iloc[i, 1]).strip()    # B欄: 系統名稱
-                name_raw = str(df.iloc[i, 2]).strip()   # C欄: 設備名稱
-                volt = str(df.iloc[i, 9]).strip()       # J欄: 電壓
-                pwr = str(df.iloc[i, 10]).strip()       # K欄: 功率值
-                qty = str(df.iloc[i, 19]).strip()       # T欄: 數量
-                hours = str(df.iloc[i, 23]).strip()     # X欄: 運轉時數
+                sys_raw = str(df.iloc[i, 1]).strip()    # B: 系統名稱
+                name_raw = str(df.iloc[i, 2]).strip()   # C: 設備名稱
+                volt = str(df.iloc[i, 9]).strip()       # J: 電壓
+                pwr = str(df.iloc[i, 10]).strip()       # K: 功率值
+                qty = str(df.iloc[i, 19]).strip()       # T: 數量
+                hours = str(df.iloc[i, 23]).strip()     # X: 運轉時數
 
-                # --- 過濾雜訊 ---
-                # 排除空值、註解或合計行
+                # 過濾：排除空行、合計行、或註解行
                 if sys_raw in ["nan", "None", ""] or "合計" in sys_raw or "註" in sys_raw:
                     continue
                 if name_raw in ["nan", "None", ""]:
                     continue
 
-                # --- 格式清洗 ---
-                # 1. 系統名稱排除「1. 」數字開頭
+                # 清洗：系統名稱排除「1. 」數字開頭
                 sys_name = sys_raw.split('.')[-1].strip() if '.' in sys_raw else sys_raw
                 
-                # 2. 處理數字中的逗號
-                try:
-                    pwr_val = float(pwr.replace(',', ''))
-                    qty_val = int(float(qty.replace(',', '')))
-                    hours_val = int(float(hours.replace(',', '')))
-                except:
-                    pwr_val, qty_val, hours_val = pwr, qty, hours
+                # 數值格式清洗 (去除小數點後多餘的0)
+                def clean_num(v):
+                    return v.replace('.0', '') if v.endswith('.0') else v
 
-                all_other_systems.append([sys_name, name_raw, volt, pwr_val, qty_val, hours_val])
+                all_data.append([sys_name, name_raw, clean_num(volt), clean_num(pwr), clean_num(qty), clean_num(hours)])
         
-        return all_other_systems
-    except Exception as e:
-        print(f"解析其他系統時出錯: {e}")
+        return all_data
+    except:
         return None
 # --- 3. Word 生成函數庫 ---
 
@@ -261,7 +251,47 @@ def add_cooling_section(doc, data):
     p5 = doc.add_paragraph(); p5.paragraph_format.left_indent = Pt(20)
     set_font_kai_bold_14(p5.add_run("(5) 空調附屬設備："))
     set_font_kai_11(p5.add_run("空氣側採用空調箱或小型送風機供應空調至現場使用。"))
+def add_other_systems_table(doc, other_data):
+    # 標題 4.其他系統： (標楷加粗 14號)
+    p = doc.add_paragraph()
+    run = p.add_run("4.其他系統：")
+    set_font_kai_bold_14(run)
 
+    # 建立表格 (6欄)
+    table = doc.add_table(rows=2, cols=6)
+    table.style = 'Table Grid'
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # 跨列合併處理表頭
+    table.cell(0, 0).merge(table.cell(1, 0)) # 系統名稱
+    table.cell(0, 1).merge(table.cell(1, 1)) # 設備名稱
+    table.cell(0, 2).merge(table.cell(0, 3)) # 設備電功率 (跨兩欄)
+    table.cell(0, 4).merge(table.cell(1, 4)) # 現有數量
+    table.cell(0, 5).merge(table.cell(1, 5)) # 運轉時數
+
+    headers = [
+        (table.cell(0, 0), "系統名稱"),
+        (table.cell(0, 1), "設備名稱"),
+        (table.cell(0, 2), "設備電功率"),
+        (table.cell(1, 2), "電壓(伏特)"),
+        (table.cell(1, 3), "功率值(瓩)"),
+        (table.cell(0, 4), "現有數量\n(台)"),
+        (table.cell(0, 5), "運轉時數\n(小時/年)")
+    ]
+
+    for cell, text in headers:
+        cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cp = cell.paragraphs[0]
+        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        set_font_kai_11(cp.add_run(text))
+
+    # 填入數據 (黑字標楷 11號)
+    for row_vals in other_data:
+        cells = table.add_row().cells
+        for i, val in enumerate(row_vals):
+            cp = cells[i].paragraphs[0]
+            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            set_font_kai_11(cp.add_run(str(val)))
 # --- 4. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
 c0, c1, c2, c3, c4 = st.columns([0.8, 1.5, 1.2, 1.2, 1.5])
@@ -314,7 +344,10 @@ if final_file:
         if p_data:
             add_pump_section(doc, p_data, has_sec)
             add_cooling_section(doc, p_data)
-        
+        # 在 doc = Document() 下方適當位置
+        o_data = fetch_other_systems(final_file)
+        if o_data:
+    add_other_systems_table(doc, o_data)
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
