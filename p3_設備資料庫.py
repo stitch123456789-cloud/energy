@@ -337,7 +337,7 @@ def add_site_photos_table(doc):
 # 自動調整欄寬 (總寬約 6 英吋)
     for row in table.rows:
         for cell in row.cells:
-            cell.width = Inches(3.0)
+            cell.width = Inches(3.5)
     # 在表格最後加上分節符號
     doc.add_page_break()
 # --- 4. Streamlit 介面 ---
