@@ -142,7 +142,7 @@ def fetch_pump_data(file):
                 
         return pumps, has_secondary
     except: return None, False
-        def fetch_cooling_system_data(file):
+def fetch_cooling_system_data(file):
     try:
         xl = pd.ExcelFile(file)
         target_sheets = [s for s in xl.sheet_names if "空調系統(三)" in s]
