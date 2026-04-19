@@ -44,51 +44,80 @@ with cc:
 st.markdown("---")
 left_col, right_col = st.columns(2)
 
-# --- 1. 初始化 Session State (加入 RT 與 台數 到運轉表格) ---
+# --- 初始化 Session State (確保預設值包含 RT 與 台數) ---
+if "old_cfg_data" not in st.session_state:
+    st.session_state.old_cfg_data = pd.DataFrame([{"編號": "CH-1", "台數": 2, "容量(RT)": 500, "型式": "螺旋式"}])
+
+if "new_cfg_data" not in st.session_state:
+    st.session_state.new_cfg_data = st.session_state.old_cfg_data.copy()
+    st.session_state.new_cfg_data.at[0, "型式"] = "離心式"
+
+# 重點：初始化運轉表格，加入 RT 與 台數 欄位
 if "old_op_data" not in st.session_state:
     st.session_state.old_op_data = pd.DataFrame({
         "季節": ["春秋", "夏季", "冬季"],
-        "RT": [500, 500, 500],        # 新增：讓您手動填
-        "台數": [1, 1, 1],             # 新增：讓您手動填
-        "時數(hr/y)": [2190, 1095, 1095],
-        "負載率(%)": [60, 70, 50],
+        "RT": [500, 500, 500],        # 新增欄位
+        "台數": [1, 1, 1],             # 新增欄位
+        "時數(hr/y)": [4380, 1095, 1095],
+        "負載率(%)": [70, 80, 50],
         "效率(kW/RT)": [round(base_old_eff*0.96,3), base_old_eff, round(base_old_eff*0.94,3)]
     })
 
 if "new_op_data" not in st.session_state:
-    # 預設複製改善前的所有數值
     st.session_state.new_op_data = st.session_state.old_op_data.copy()
     st.session_state.new_op_data["效率(kW/RT)"] = [round(base_new_eff*0.96,3), base_new_eff, round(base_new_eff*0.94,3)]
 
-# --- 2. 介面佈局與同步邏輯 ---
+# --- 第三排佈局實作 ---
 left_col, right_col = st.columns(2)
 
 with left_col:
     st.subheader("🧊 1. 改善前 (現況)")
-    # 配置表 (僅作為文字敘述用)
-    old_cfg = st.data_editor(st.session_state.old_cfg_data, num_rows="dynamic", key="old_cfg_edit")
-    # 運轉表 (包含 RT 與 台數)
+    # 編輯現況配置
+    old_cfg = st.data_editor(st.session_state.old_cfg_data, num_rows="dynamic", use_container_width=True, key="old_cfg_edit")
+    # 編輯現況運轉 (現在包含 RT 與 台數 了)
     old_op = st.data_editor(st.session_state.old_op_data, use_container_width=True, key="old_op_edit")
 
-    # 同步邏輯：左邊改，右邊跟著改 (RT, 台數, 時數, 負載)
+    # 【連動邏輯】左邊改，同步更新右邊的 Session State
+    if not old_cfg.equals(st.session_state.old_cfg_data):
+        st.session_state.old_cfg_data = old_cfg
+        for col in ["編號", "台數", "容量(RT)"]:
+            if col in st.session_state.new_cfg_data.columns:
+                st.session_state.new_cfg_data[col] = old_cfg[col]
+        st.rerun()
+
     if not old_op.equals(st.session_state.old_op_data):
         st.session_state.old_op_data = old_op
+        # 同步更新右側（包含 RT 與 台數 的變動）
         for col in ["RT", "台數", "時數(hr/y)", "負載率(%)"]:
             st.session_state.new_op_data[col] = old_op[col]
         st.rerun()
 
 with right_col:
     st.subheader("✨ 2. 改善後 (預期)")
-    new_cfg = st.data_editor(st.session_state.new_cfg_data, num_rows="dynamic", key="new_cfg_edit")
-    # 改善後運轉表 (也可獨立修改 RT 與 台數)
+    # 編輯改善後配置
+    new_cfg = st.data_editor(st.session_state.new_cfg_data, num_rows="dynamic", use_container_width=True, key="new_cfg_edit")
+    # 編輯改善後運轉 (您可以針對不同季節改 RT 或 台數)
     new_op = st.data_editor(st.session_state.new_op_data, use_container_width=True, key="new_op_edit")
     
+    # 儲存右側的手動修改
+    st.session_state.new_cfg_data = new_cfg
     st.session_state.new_op_data = new_op
 
-# --- 3. Word 表格生成函數 (修改計算邏輯) ---
+# ---------------------------------------------------------
+# --- 4. Word 生成與計算邏輯 (核心計算改用表格內 RT/台數) ---
+# ---------------------------------------------------------
+doc = Document()
+
+# A. 一、現況說明文字
+add_run_kai(doc.add_heading('', level=1), "一、現況說明", size=14, is_bold=True)
+old_desc_str = "、".join([f"{r['台數']}台{r['容量(RT)']}RT {r['型式']}" for _, r in old_cfg.iterrows()])
+p1 = doc.add_paragraph()
+p1.paragraph_format.first_line_indent = Pt(24)
+add_run_kai(p1, f"1. {unit_name}空調系統有{old_desc_str}冰水主機(設置年份{setup_year}年)，推估年度耗電量如下表：")
+
+# 表格生成函數
 def build_word_table(doc, op_df):
-    table = doc.add_table(rows=1, cols=7)
-    table.style = 'Table Grid'
+    table = doc.add_table(rows=1, cols=7); table.style = 'Table Grid'
     hd = ["季節", "製冷量\n(RT)", "台數", "運轉耗電率\n(kW/RT)", "時數\n(時/年)", "負載率", "耗電\n(kWh/年)"]
     for i, h in enumerate(hd):
         cp = table.cell(0,i).paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -96,29 +125,15 @@ def build_word_table(doc, op_df):
 
     total_kwh = 0
     for _, row in op_df.iterrows():
-        # 重要：現在直接讀取表格內的 RT 與 台數
-        current_rt = row["RT"]
-        current_qty = row["台數"]
-        
-        # 計算：RT * 台數 * 效率 * 時數 * 負載率
-        kwh = current_rt * current_qty * row["效率(kW/RT)"] * row["時數(hr/y)"] * (row["負載率(%)"]/100)
+        # 重要：現在直接用表格內的 RT 與 台數 計算
+        kwh = row["RT"] * row["台數"] * row["效率(kW/RT)"] * row["時數(hr/y)"] * (row["負載率(%)"]/100)
         total_kwh += kwh
-        
         r_cells = table.add_row().cells
-        vals = [
-            row["季節"], 
-            f"{current_rt:,.0f}", 
-            f"{current_qty:,.0f}", 
-            f"{row['效率(kW/RT)']:.3f}", 
-            f"{row['時數(hr/y)']:,.0f}", 
-            f"{row['負載率(%)']}%", 
-            f"{kwh:,.0f}"
-        ]
+        vals = [row["季節"], f"{row['RT']:,.0f}", f"{row['台數']:,.0f}", f"{row['效率(kW/RT)']:.3f}", f"{row['時數(hr/y)']:,.0f}", f"{row['負載率(%)']}%", f"{kwh:,.0f}"]
         for i, v in enumerate(vals):
             cp = r_cells[i].paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             add_run_kai(cp, v)
     
-    # 合計列
     row_sum = table.add_row().cells
     row_sum[0].merge(row_sum[5])
     p_sum = row_sum[0].paragraphs[0]; p_sum.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -127,13 +142,8 @@ def build_word_table(doc, op_df):
     add_run_kai(p_val, f"{total_kwh:,.0f}", is_bold=True)
     return total_kwh
 
-# --- 呼叫函數處也要簡化 ---
-total_old_kwh = build_word_table(doc, old_op)
-# ... 略 ...
-total_new_kwh = build_word_table(doc, new_op)
-
 # 生成現況表格
-total_old_kwh = build_word_table(doc, old_cfg, old_op)
+total_old_kwh = build_word_table(doc, old_op)
 p_old_sum = doc.add_paragraph(); p_old_sum.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p_old_sum, f"2.推估耗電量：{total_old_kwh:,.0f} kWh/年。")
 
@@ -151,12 +161,13 @@ add_run_kai(doc.add_heading('', level=1), "三、預期效益", size=14, is_bold
 p_res_title = doc.add_paragraph(); p_res_title.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p_res_title, "改善後冰水主機耗電量計算如下：")
 
-new_desc = " + ".join([f"{r['容量(RT)']}RT×{r['台數']}" for _, r in new_cfg.iterrows()])
+# 這裡動態抓取改善後的 RT x 台數 描述
+new_desc_str = " + ".join([f"{r['容量(RT)']}RT×{r['台數']}" for _, r in new_cfg.iterrows()])
 p5 = doc.add_paragraph(); p5.paragraph_format.first_line_indent = Pt(24)
-add_run_kai(p5, f"1. 採用高效率離心式冰水主機 {new_desc} 台，推估年度耗電量如下表：")
+add_run_kai(p5, f"1. 採用高效率離心式冰水主機 {new_desc_str} 台，推估年度耗電量如下表：")
 
 # 生成改善後表格
-total_new_kwh = build_word_table(doc, new_cfg, new_op)
+total_new_kwh = build_word_table(doc, new_op)
 
 # D. 最終結算
 save_kwh = total_old_kwh - total_new_kwh
