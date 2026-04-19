@@ -293,35 +293,50 @@ def add_other_systems_table(doc, other_data):
             cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             set_font_kai_11(cp.add_run(str(val)))
 def add_site_photos_table(doc):
-    # 標題 5.現場現況照片： (標楷加粗 14號)
-    p = doc.add_paragraph()
-    run = p.add_run("5.現場現況照片：")
-    set_font_kai_bold_14(run)
+    # 1. 大標題：現場節能輔導照片 (標楷、黑色、18號、加粗)
+    p_main = doc.add_paragraph()
+    p_main.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_main = p_main.add_run("現場節能輔導照片")
+    run_main.font.name = '標楷體'
+    run_main._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+    run_main.font.size = Pt(18)
+    run_main.font.bold = True
 
-    # 建立表格 (6列 2欄)
-    items = ["大樓外觀", "冰水主機", "水泵群", "冷卻水塔", "高壓變電站", "空調監控系統"]
-    table = doc.add_table(rows=len(items), cols=2)
+    # 2. 定義設備清單 (兩兩一組)
+    items = [
+        ["大樓外觀", "冰水主機"],
+        ["水泵群", "冷卻水塔"],
+        ["高壓變電站", "空調監控系統"]
+    ]
+
+    # 3. 建立表格 (共 6 列，3列放圖，3列放字)
+    table = doc.add_table(rows=0, cols=2)
     table.style = 'Table Grid'
     table.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # 設定表格高度與寬度 (預留放照片的空間)
-    from docx.shared import Inches
-    for i, item_name in enumerate(items):
-        row = table.rows[i]
-        # 設定固定高度，避免表格縮在一起 (例如 2.5 英吋)
-        row.height = Inches(2.5)
-        
-        # 左側單元格：填入名稱
-        cell_name = row.cells[0]
-        cell_name.width = Inches(1.5) # 名稱欄位窄一點
-        cell_name.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
-        cp = cell_name.paragraphs[0]
-        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_font_kai_11(cp.add_run(item_name))
+    for row_pair in items:
+        # --- 新增圖片行 ---
+        image_row = table.add_row()
+        image_row.height = Inches(2.2) # 設定圖片框高度
+        for cell in image_row.cells:
+            cell.width = Inches(3.0)
 
-        # 右側單元格：空白 (預留放照片)
-        cell_photo = row.cells[1]
-        cell_photo.width = Inches(4.5) # 照片欄位寬一點
+        # --- 新增文字行 ---
+        text_row = table.add_row()
+        for i, name in enumerate(row_pair):
+            cell = text_row.cells[i]
+            cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT # 文字靠左對齊
+            run = p.add_run(name)
+            # 設定字體 (標楷、黑色、12號)
+            run.font.name = '標楷體'
+            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            run.font.size = Pt(12)
+            run.font.bold = False
+
+    # 在表格最後加上分節符號
+    doc.add_page_break()
 # --- 4. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
 c0, c1, c2, c3, c4 = st.columns([0.8, 1.5, 1.2, 1.2, 1.5])
