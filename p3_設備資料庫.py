@@ -53,10 +53,20 @@ def fetch_chiller_spec(file):
         for sheet in target_sheets:
             df = pd.read_excel(file, sheet_name=sheet, header=None)
             for i in range(6, len(df)):
-                name_raw = str(df.iloc[i, 1]).strip()
+                name_raw = str(df.iloc[i, 1]).strip() # B: 設備名稱
+                sn_raw = str(df.iloc[i, 2]).strip()   # C: 設備編號
+                
+                # --- 核心過濾邏輯 ---
+                # 1. 必須包含 "主機" 
                 if "主機" not in name_raw: continue
+                # 2. 排除說明的關鍵字
+                if any(x in name_raw for x in ["效率", "標準", "請依", "IE1", "IE2"]): continue
+                # 3. 如果編號是 nan，代表這不是真正的設備列
+                if sn_raw == "nan" or sn_raw == "": continue
+                
+                # --- 通過過濾後才開始解析數據 ---
                 name = name_raw.split('.')[-1].strip() if '.' in name_raw else name_raw
-                sn = str(df.iloc[i, 2]).strip()
+                sn = sn_raw
                 form = str(df.iloc[i, 5]).strip()
                 inv = "變頻" if str(df.iloc[i, 7]).strip() == "有" else "定頻"
                 volt = str(df.iloc[i, 11]).strip()
@@ -65,10 +75,15 @@ def fetch_chiller_spec(file):
                 cap = str(df.iloc[i, 14]).strip()
                 unit = str(df.iloc[i, 15]).strip().upper()
                 qty = str(df.iloc[i, 21]).strip()
+                
+                # 如果容量也是 nan，代表這一列無效
+                if cap == "nan" or cap == "": continue
+
                 try:
                     v = float(cap.replace(',',''))
                     rt = round(v/3.517,1) if "KW" in unit else (round(v/3024,1) if "KCAL" in unit else v)
                 except: rt = cap
+                
                 all_chillers.append([name, sn, form, volt, pwr, yr, rt, qty, inv])
         return all_chillers
     except: return None
