@@ -377,20 +377,25 @@ final_file = up_file if up_file else st.session_state.get('global_excel')
 if final_file:
     if st.button("🚀 生成並下載設備系統報告", use_container_width=True):
         doc = Document()
-        # 1. 照明系統
+        
+        # 1. 處理照明 (確保這段在按鈕內)
         l_data = fetch_and_aggregate_lighting(final_file)
         if l_data: add_lighting_table(doc, l_data)
-        doc.add_paragraph()
-        # 2. 空調開啟模式
+        
+        # 2. 處理空調開啟模式
         add_ac_mode_table(doc, ac_rows)
-        doc.add_paragraph()
-        # 3. 冰水主機規格
+        
+        # 3. 處理冰水主機
         c_data = fetch_chiller_spec(final_file)
         if c_data: add_chiller_spec_table(doc, c_data)
-        # 4. 冰水管路 (新加入)
-    pump_data, has_sec = fetch_pump_data(final_file)
-    if pump_data:
-        add_pump_section(doc, pump_data, has_sec)
+        
+        # 4. 處理管路與冷卻水系統 (確保這些都在按鈕內)
+        p_data, has_sec = fetch_pump_and_cooling_data(final_file)
+        if p_data:
+            add_pump_section(doc, p_data, has_sec)    # (3) 冰水管路
+            add_cooling_section(doc, p_data)         # (4) 冷卻水系統 & (5) 附屬設備
+        
+        # 5. 下載 (這段必須在按鈕內的最末尾)
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
