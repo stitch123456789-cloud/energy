@@ -142,6 +142,42 @@ def fetch_pump_data(file):
                 
         return pumps, has_secondary
     except: return None, False
+        def fetch_cooling_system_data(file):
+    try:
+        xl = pd.ExcelFile(file)
+        target_sheets = [s for s in xl.sheet_names if "空調系統(三)" in s]
+        cooling_data = {"冷卻水泵": [], "冷卻水塔": []}
+        
+        for sheet in target_sheets:
+            df = pd.read_excel(file, sheet_name=sheet, header=None)
+            for i in range(6, len(df)):
+                name = str(df.iloc[i, 1]).strip() # B: 設備名稱
+                sn = str(df.iloc[i, 2]).strip()   # C: 編號
+                inv = "變頻" if str(df.iloc[i, 7]).strip() == "有" else "定頻"
+                cap_val = str(df.iloc[i, 14]).strip() # O: 流量或容量
+                unit = str(df.iloc[i, 15]).strip().upper() # P: 單位
+                hp_val = str(df.iloc[i, 18]).strip()  # S: 馬力
+                qty = str(df.iloc[i, 21]).strip()     # V: 數量
+
+                if cap_val == "nan" or hp_val == "nan": continue
+
+                # --- 處理冷卻水泵 ---
+                if "冷卻水泵" in name:
+                    try:
+                        f_lpm = float(cap_val.replace(',','')) * 3.785 if "GPM" in unit else float(cap_val.replace(',',''))
+                        hp = float(hp_val)
+                        # 揚程推算 (效率62%)
+                        head = round((hp * 462.52) / (f_lpm / 60 * 9.8), 1) if f_lpm > 0 else 0
+                        cooling_data["冷卻水泵"].append([sn, int(hp), int(f_lpm), head, qty, inv])
+                    except: continue
+
+                # --- 處理冷卻水塔 ---
+                elif "冷卻水塔" in name:
+                    # 水塔馬力通常顯示 10*3 這種形式，如果 Excel 裡有 * 就直接帶入字串
+                    cooling_data["冷卻水塔"].append([sn, hp_val, cap_val, qty, inv])
+        
+        return cooling_data
+    except: return None
 # --- 4. Word 生成函數 ---
 
 def add_lighting_table(doc, lighting_data):
@@ -245,6 +281,58 @@ def add_pump_section(doc, pump_data, has_secondary):
                 set_font_kai_11(cp.add_run(clean_v))
         
         doc.add_paragraph() # 每個表格間的間距
+        def add_cooling_section(doc, cooling_data):
+    # (4) 冷卻水系統
+    p4 = doc.add_paragraph(); p4.paragraph_format.left_indent = Pt(20)
+    set_font_kai_bold_14(p4.add_run("(4) 冷卻水系統："))
+
+    # --- 冷卻水泵表格 ---
+    if cooling_data["冷卻水泵"]:
+        table = doc.add_table(rows=2, cols=6); table.style = 'Table Grid'
+        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 標籤列
+        title_cell = table.cell(0, 0).merge(table.cell(0, 5))
+        set_font_kai_11(title_cell.paragraphs[0].add_run("冷卻水泵"))
+        title_cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 欄位名稱
+        h_pumps = ["設備編號", "額定馬力\n(HP)", "額定流量\n(LPM)", "揚程\n(m)", "數量\n(台)", "備註"]
+        for i, txt in enumerate(h_pumps):
+            set_font_kai_11(table.cell(1, i).paragraphs[0].add_run(txt))
+            table.cell(1, i).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 填值
+        for r_vals in cooling_data["冷卻水泵"]:
+            row = table.add_row().cells
+            for i, v in enumerate(r_vals):
+                set_font_kai_11(row[i].paragraphs[0].add_run(str(v).replace('.0','')))
+                row[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph()
+
+    # --- 冷卻水塔表格 ---
+    if cooling_data["冷卻水塔"]:
+        table = doc.add_table(rows=2, cols=5); table.style = 'Table Grid'
+        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 標籤列
+        title_cell = table.cell(0, 0).merge(table.cell(0, 4))
+        set_font_kai_11(title_cell.paragraphs[0].add_run("冷卻水塔"))
+        title_cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 欄位名稱
+        h_tower = ["設備編號", "額定馬力\n(HP)", "額定容量\n(RT)", "數量\n(台)", "備註"]
+        for i, txt in enumerate(h_tower):
+            set_font_kai_11(table.cell(1, i).paragraphs[0].add_run(txt))
+            table.cell(1, i).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # 填值
+        for r_vals in cooling_data["冷卻水塔"]:
+            row = table.add_row().cells
+            for i, v in enumerate(r_vals):
+                set_font_kai_11(row[i].paragraphs[0].add_run(str(v).replace('.0','')))
+                row[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph()
+
+    # (5) 空調附屬設備 (固定文字)
+    p5 = doc.add_paragraph(); p5.paragraph_format.left_indent = Pt(20)
+    set_font_kai_bold_14(p5.add_run("(5) 空調附屬設備："))
+    run5 = p5.add_run("空氣側採用空調箱或小型送風機供應空調至現場使用。")
+    set_font_kai_11(run5)
 # --- 5. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
 
