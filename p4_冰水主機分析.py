@@ -6,19 +6,20 @@ from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
-# --- 1. 字體工具函數 (統一黑色) ---
+# --- 1. 字體工具函數 (全黑) ---
 def add_run_kai(paragraph, text, size=12, is_bold=False):
     run = paragraph.add_run(text)
     run.font.name = '標楷體'
     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
     run.font.size = Pt(size)
     run.font.bold = is_bold
-    run.font.color.rgb = RGBColor(0, 0, 0) # 強制黑色
+    run.font.color.rgb = RGBColor(0, 0, 0)
     return run
 
 # --- 2. Streamlit 介面佈局 ---
 st.title("❄️ P4. 冰水主機汰換效益分析")
 
+# --- 第一排：基本參數 ---
 col1_1, col1_2, col1_3 = st.columns(3)
 with col1_1:
     unit_name = st.text_input("單位名稱", value="貴單位")
@@ -28,6 +29,7 @@ with col1_2:
 with col1_3:
     setup_year = st.number_input("原主機設置年份 (民國)", value=104)
 
+# --- 第二排：現有主機配置 ---
 st.subheader("🧊 現有主機配置")
 df_init = pd.DataFrame([
     {"編號": "CH-1", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"},
@@ -35,21 +37,26 @@ df_init = pd.DataFrame([
 ])
 chiller_config = st.data_editor(df_init, num_rows="dynamic", use_container_width=True, key="ch_cfg_editor")
 
-st.subheader("⚙️ 改善後配置參數")
+# --- 第三排：改善方案變數 ---
+st.subheader("⚙️ 改善方案設定")
 col2_1, col2_2 = st.columns(2)
 with col2_1:
-    target_eff = st.number_input("預期改善後效率 (kW/RT)", value=0.50, step=0.01)
-with col2_2:
     suggest_ch_name = st.text_input("建議更換主機名稱", value="冰水主機(CH-1)")
+with col2_2:
+    target_eff_default = st.number_input("快速設定：預期改善後效率 (kW/RT)", value=0.50, step=0.01)
 
-st.subheader("📅 運轉參數設定")
+# --- 第四排：核心運轉數據編輯區 (改善前/後皆可修改) ---
+st.subheader("📅 運轉參數設定 (可手動修改表格內數值)")
+st.info("💡 你可以直接點擊下方表格內的任何數值進行修改 (包含現況與改善後的效率)")
+
 op_data = {
     "季節": ["春秋", "夏季", "冬季"],
     "時數(hr/y)": [2190, 1095, 1095],
     "平均負載率(%)": [60, 70, 50],
     "現況kW/RT": [0.864, 0.90, 0.846],
-    "改善後kW/RT": [target_eff, target_eff, target_eff] 
+    "改善後kW/RT": [target_eff_default, target_eff_default, target_eff_default] 
 }
+# 使用 data_editor 讓使用者完整控制所有計算因子
 df_op = st.data_editor(pd.DataFrame(op_data), use_container_width=True, key="op_cfg_editor")
 
 # ---------------------------------------------------------
@@ -57,38 +64,45 @@ df_op = st.data_editor(pd.DataFrame(op_data), use_container_width=True, key="op_
 # ---------------------------------------------------------
 doc = Document()
 
-# A. 數據預處理
+# 數據預處理
 desc_list = [f"{r['台數']}台{r['容量(RT)']}RT {r['型式']}" for _, r in chiller_config.iterrows()]
 chiller_desc_text = "、".join(desc_list)
 base_rt = chiller_config.iloc[0]['容量(RT)'] if not chiller_config.empty else 0
 
-# B. 一、現況說明
-add_run_kai(doc.add_paragraph(), "一、現況說明", size=14, is_bold=True)
+# --- A. 一、現況說明 ---
+add_run_kai(doc.add_heading('', level=1), "一、現況說明", size=14, is_bold=True)
 p1 = doc.add_paragraph()
 p1.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p1, f"1. {unit_name}空調系統有{chiller_desc_text}冰水主機(設置年份{setup_year}年)，推估年度耗電量如下表：")
 
-# --- 表格函數：用於生成現況與改善後的表格 ---
+# --- 表格生成函數 ---
 def create_energy_table(doc, data_df, rt_val, mode="old"):
-    # 建立 7 欄表格
     table = doc.add_table(rows=1, cols=7)
     table.style = 'Table Grid'
     headers = ["季節", "製冷量\n(RT)", "台數", "運轉耗電率\n(kW/RT)", "時數\n(時/年)", "負載率", "耗電\n(kWh/年)"]
     
     for i, h in enumerate(headers):
-        cell_p = table.cell(0,i).paragraphs[0]
-        cell_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        add_run_kai(cell_p, h, size=10, is_bold=True)
+        cp = table.cell(0,i).paragraphs[0]
+        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        add_run_kai(cp, h, size=10, is_bold=True)
 
     total_kwh = 0
     eff_col = "現況kW/RT" if mode == "old" else "改善後kW/RT"
     
     for _, row in data_df.iterrows():
+        # 計算耗電量：RT * 1台 * kW/RT * 時數 * 負載率
         kwh = rt_val * 1 * row[eff_col] * row["時數(hr/y)"] * (row["平均負載率(%)"]/100)
         total_kwh += kwh
         r_cells = table.add_row().cells
-        # 填充數據並置中
-        vals = [row["季節"], str(rt_val), "1", f"{row[eff_col]:.3f}", f"{row['時數(hr/y)']:,.0f}", f"{row['平均負載率(%)']}%", f"{kwh:,.0f}"]
+        vals = [
+            row["季節"], 
+            str(rt_val), 
+            "1", 
+            f"{row[eff_col]:.3f}", 
+            f"{row['時數(hr/y)']:,.0f}", 
+            f"{row['平均負載率(%)']}%", 
+            f"{kwh:,.0f}"
+        ]
         for i, v in enumerate(vals):
             cp = r_cells[i].paragraphs[0]
             cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -97,41 +111,48 @@ def create_energy_table(doc, data_df, rt_val, mode="old"):
     # 合計列
     row_sum = table.add_row().cells
     row_sum[0].merge(row_sum[5])
-    add_run_kai(row_sum[0].paragraphs[0], "總耗電量(kWh/年)", is_bold=True)
-    row_sum[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    add_run_kai(row_sum[6].paragraphs[0], f"{total_kwh:,.0f}", is_bold=True)
-    row_sum[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sum_p = row_sum[0].paragraphs[0]
+    sum_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_run_kai(sum_p, "總耗電量(kWh/年)", is_bold=True)
+    
+    sum_val_p = row_sum[6].paragraphs[0]
+    sum_val_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_run_kai(sum_val_p, f"{total_kwh:,.0f}", is_bold=True)
     return total_kwh
 
-# C. 插入現況耗能表格
+# --- B. 插入改善前表格 ---
 total_old_kwh = create_energy_table(doc, df_op, base_rt, mode="old")
 
-# D. 二、改善方案
+# --- C. 二、改善方案 ---
 doc.add_paragraph()
-add_run_kai(doc.add_paragraph(), "二、改善方案", size=14, is_bold=True)
+add_run_kai(doc.add_heading('', level=1), "二、改善方案", size=14, is_bold=True)
 p2 = doc.add_paragraph()
 p2.paragraph_format.first_line_indent = Pt(24)
-add_run_kai(p2, f"1. 建議編列經費汰換為高效率冰水主機，目前新型高效率 1 級能效離心式冰水主機之運轉效率可達 {target_eff:.2f} kW/RT，如與以上大樓現況冰水主機運轉效率相比，有節能空間。")
+# 這裡的運轉效率取自表格夏季的設定值作為代表
+target_eff_display = df_op.loc[df_op['季節'] == '夏季', '改善後kW/RT'].values[0]
+
+add_run_kai(p2, f"1. 建議編列經費汰換為高效率冰水主機，目前新型高效率 1 級能效離心式冰水主機之運轉效率可達 {target_eff_display:.2f} kW/RT，如與以上大樓現況冰水主機運轉效率相比，有節能空間。")
 p3 = doc.add_paragraph()
 p3.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p3, f"2. 參考附件建議優先將現況低效率之{suggest_ch_name}，汰換為符合建議標準之冰水主機，以節省主機運轉耗能。")
 
-# E. 三、預期效益
+# --- D. 三、預期效益 ---
 doc.add_paragraph()
-add_run_kai(doc.add_paragraph(), "三、預期效益", size=14, is_bold=True)
-p4 = doc.add_paragraph(); p4.paragraph_format.first_line_indent = Pt(24)
-add_run_kai(p4, "改善後冰水主機耗電量計算如下：")
-p5 = doc.add_paragraph(); p5.paragraph_format.first_line_indent = Pt(24)
+add_run_kai(doc.add_heading('', level=1), "三、預期效益", size=14, is_bold=True)
+doc.add_paragraph().paragraph_format.first_line_indent = Pt(24)
+add_run_kai(doc.paragraphs[-1], "改善後冰水主機耗電量計算如下：")
+p5 = doc.add_paragraph()
+p5.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p5, f"1. 採用高效率離心式冰水主機 {base_rt}RT×1 台，推估年度耗電量如下表：")
 
-# F. 插入改善後耗能表格
+# --- E. 插入改善後表格 ---
 total_new_kwh = create_energy_table(doc, df_op, base_rt, mode="new")
 
-# G. 結尾效益文字
+# --- F. 結尾效益文字 ---
 save_kwh = total_old_kwh - total_new_kwh
 save_money = save_kwh * elec_price / 10000
-doc.add_paragraph()
-res_p = doc.add_paragraph(); res_p.paragraph_format.first_line_indent = Pt(24)
+res_p = doc.add_paragraph()
+res_p.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(res_p, f"預估年節電量約 {save_kwh:,.0f} kWh，年節省電費約 {save_money:.1f} 萬元。")
 
 # --- 4. 輸出中心 ---
@@ -147,7 +168,7 @@ with col_btn1:
         if 'report_warehouse' not in st.session_state:
             st.session_state['report_warehouse'] = {}
         st.session_state['report_warehouse']["4. 冰水主機效益分析"] = current_word_data
-        st.success("✅ 數據已同步！")
+        st.success("✅ 數據已鎖定並同步！")
         st.rerun()
 
 with col_btn2:
