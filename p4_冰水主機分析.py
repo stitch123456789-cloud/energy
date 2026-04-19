@@ -41,7 +41,7 @@ with col2:
 st.subheader("🧊 現有主機配置")
 df_init = pd.DataFrame([
     {"編號": "CH-1", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"},
-    {"編號": "CH-2", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"}
+    {"編號": "CH-2", "台數": 1, "容量(RT)": 350, "型式": "離心式"}
 ])
 chiller_config = st.data_editor(df_init, num_rows="dynamic", use_container_width=True)
 
