@@ -208,62 +208,43 @@ def add_chiller_spec_table(doc, chiller_data):
             set_font_kai_11(run) # 此處已修正為預設黑字
 def add_pump_section(doc, pump_data, has_secondary):
     # (3) 冰水管路系統
-    p3 = doc.add_paragraph()
-    run3 = p3.add_run("(3) 冰水管路系統：")
-    set_font_kai_bold_14(run3)
+    p3 = doc.add_paragraph(); p3.paragraph_format.left_indent = Pt(20)
+    set_font_kai_bold_14(p3.add_run("(3) 冰水管路系統："))
+    
+    side_txt = "採一/二次側系統設計" if has_sec else "採一次側系統設計"
+    ps = doc.add_paragraph(); ps.paragraph_format.left_indent = Pt(40)
+    set_font_kai_11(ps.add_run(f"{side_txt}，設備規格說明如下表所示"))
 
-    # 側向系統文字判定
-    side_text = "採一/二次側系統設計" if has_secondary else "採一次側系統設計"
-    p_side = doc.add_paragraph()
-    p_side.paragraph_format.left_indent = Pt(40)
-    run_side = p_side.add_run(f"{side_text}，設備規格說明如下表所示")
-    set_font_kai_11(run_side)
-
-    # 依序生成 冰水泵、區域水泵、冷卻水泵 的表格
     for p_name in ["冰水泵", "區域水泵", "冷卻水泵"]:
         items = pump_data.get(p_name, [])
         if not items: continue
-
-        # 小標題 (置中)
-        sub_p = doc.add_paragraph()
-        sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_sub = sub_p.add_run(p_name)
-        set_font_kai_11(run_sub)
-
-        # 建立表格
-        table = doc.add_table(rows=2, cols=6)
-        table.style = 'Table Grid'
+        
+        # 建立表格 (多加一列放標題，共 3 列標頭 + 數據)
+        # 初始 2 列：第一列標題，第二列欄位名稱，數據在後續 add_row
+        table = doc.add_table(rows=2, cols=6); table.style = 'Table Grid'
         table.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # 垂直合併第一欄與最後一欄
-        table.cell(0, 0).merge(table.cell(1, 0)) # 設備編號
-        table.cell(0, 5).merge(table.cell(1, 5)) # 備註
-        
-        headers = [
-            (table.cell(0, 0), "設備編號"),
-            (table.cell(0, 1), "額定馬力\n(HP)"),
-            (table.cell(0, 2), "額定流量\n(LPM)"),
-            (table.cell(0, 3), "揚程\n(m)"),
-            (table.cell(0, 4), "數量\n(台)"),
-            (table.cell(0, 5), "備註")
-        ]
-        
-        for cell, txt in headers:
-            p = cell.paragraphs[0]
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(txt)
-            set_font_kai_11(run)
+        # --- 第一列：小標題 (冰水泵等) ---
+        title_cell = table.cell(0, 0).merge(table.cell(0, 5))
+        cp_title = title_cell.paragraphs[0]; cp_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        set_font_kai_11(cp_title.add_run(p_name))
 
-        # 填入數據
-        for row_vals in items:
-            row_cells = table.add_row().cells
-            for idx, val in enumerate(row_vals):
-                p = row_cells[idx].paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run(str(val))
-                set_font_kai_11(run)
+        # --- 第二列：欄位名稱 ---
+        h3 = ["設備編號", "額定馬力\n(HP)", "額定流量\n(LPM)", "揚程\n(m)", "數量\n(台)", "備註"]
+        for i, txt in enumerate(h3):
+            cp = table.cell(1, i).paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            set_font_kai_11(cp.add_run(txt))
+
+        # --- 填入數據 ---
+        for r_vals in items:
+            row = table.add_row().cells
+            for i, v in enumerate(r_vals):
+                cp = row[i].paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                # 將數值轉為字串並去除 .0
+                clean_v = str(v).replace('.0', '')
+                set_font_kai_11(cp.add_run(clean_v))
         
-        doc.add_paragraph() # 表格間距
+        doc.add_paragraph() # 每個表格間的間距
 # --- 5. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
 
