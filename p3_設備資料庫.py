@@ -120,7 +120,53 @@ def fetch_pump_and_cooling_data(file):
                     data["冷卻水塔"].append([sn, hp_val, cap_val, qty, inv])
         return data, has_sec
     except: return None, False
+def fetch_other_systems(file):
+    try:
+        xl = pd.ExcelFile(file)
+        # 模糊搜尋所有包含「表九之三」的分頁
+        target_sheets = [s for s in xl.sheet_names if "表九之三" in s]
+        
+        if not target_sheets:
+            return None
 
+        all_other_systems = []
+        for sheet in target_sheets:
+            df = pd.read_excel(file, sheet_name=sheet, header=None)
+            
+            # 從數據行開始讀取（通常是 index 6）
+            for i in range(6, len(df)):
+                sys_raw = str(df.iloc[i, 1]).strip()    # B欄: 系統名稱
+                name_raw = str(df.iloc[i, 2]).strip()   # C欄: 設備名稱
+                volt = str(df.iloc[i, 9]).strip()       # J欄: 電壓
+                pwr = str(df.iloc[i, 10]).strip()       # K欄: 功率值
+                qty = str(df.iloc[i, 19]).strip()       # T欄: 數量
+                hours = str(df.iloc[i, 23]).strip()     # X欄: 運轉時數
+
+                # --- 過濾雜訊 ---
+                # 排除空值、註解或合計行
+                if sys_raw in ["nan", "None", ""] or "合計" in sys_raw or "註" in sys_raw:
+                    continue
+                if name_raw in ["nan", "None", ""]:
+                    continue
+
+                # --- 格式清洗 ---
+                # 1. 系統名稱排除「1. 」數字開頭
+                sys_name = sys_raw.split('.')[-1].strip() if '.' in sys_raw else sys_raw
+                
+                # 2. 處理數字中的逗號
+                try:
+                    pwr_val = float(pwr.replace(',', ''))
+                    qty_val = int(float(qty.replace(',', '')))
+                    hours_val = int(float(hours.replace(',', '')))
+                except:
+                    pwr_val, qty_val, hours_val = pwr, qty, hours
+
+                all_other_systems.append([sys_name, name_raw, volt, pwr_val, qty_val, hours_val])
+        
+        return all_other_systems
+    except Exception as e:
+        print(f"解析其他系統時出錯: {e}")
+        return None
 # --- 3. Word 生成函數庫 ---
 
 def add_lighting_table(doc, data):
