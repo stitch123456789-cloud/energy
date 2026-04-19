@@ -16,7 +16,7 @@ def add_run_kai(paragraph, text, size=12, is_bold=False):
     run.font.color.rgb = RGBColor(0, 0, 0)
     return run
 
-# --- 2. Streamlit 介面佈局與參數設定 ---
+# --- 2. Streamlit 介面佈局 ---
 st.title("❄️ P4. 冰水主機汰換效益分析")
 
 c1, c2, c3 = st.columns(3)
@@ -38,7 +38,7 @@ with cb:
 with cc:
     base_new_eff = st.number_input("改善後夏季效率基準 (kW/RT)", value=0.50, step=0.01)
 
-# --- 3. 初始化 Session State (加入 RT 與 台數 到運轉表格) ---
+# --- 3. 初始化 Session State ---
 if "old_cfg_data" not in st.session_state:
     st.session_state.old_cfg_data = pd.DataFrame([{"編號": "CH-1", "台數": 2, "容量(RT)": 500, "型式": "螺旋式"}])
 
@@ -49,8 +49,8 @@ if "new_cfg_data" not in st.session_state:
 if "old_op_data" not in st.session_state:
     st.session_state.old_op_data = pd.DataFrame({
         "季節": ["春秋", "夏季", "冬季"],
-        "RT": [500, 500, 500],        # 這邊讓您可以手動填
-        "台數": [1, 1, 1],             # 這邊讓您可以手動填
+        "RT": [500, 500, 500],
+        "台數": [1, 1, 1],
         "時數(hr/y)": [4380, 1095, 1095],
         "負載率(%)": [70, 80, 50],
         "效率(kW/RT)": [round(base_old_eff*0.96,3), base_old_eff, round(base_old_eff*0.94,3)]
@@ -62,13 +62,10 @@ if "new_op_data" not in st.session_state:
 
 # --- 4. 介面表格顯示與同步邏輯 ---
 left_col, right_col = st.columns(2)
-
 with left_col:
     st.subheader("🧊 1. 改善前 (現況)")
     old_cfg = st.data_editor(st.session_state.old_cfg_data, num_rows="dynamic", use_container_width=True, key="old_cfg_edit")
     old_op = st.data_editor(st.session_state.old_op_data, use_container_width=True, key="old_op_edit")
-
-    # 同步邏輯：左邊改，右邊跟著預填
     if not old_op.equals(st.session_state.old_op_data):
         st.session_state.old_op_data = old_op
         for col in ["RT", "台數", "時數(hr/y)", "負載率(%)"]:
@@ -80,6 +77,10 @@ with right_col:
     new_cfg = st.data_editor(st.session_state.new_cfg_data, num_rows="dynamic", use_container_width=True, key="new_cfg_edit")
     new_op = st.data_editor(st.session_state.new_op_data, use_container_width=True, key="new_op_edit")
     st.session_state.new_op_data = new_op
+
+# ❗ 重要：將投資金額輸入框移到計算之前 ❗
+st.markdown("---")
+invest_amount = st.number_input("請輸入預估投資金額 (萬元)", value=1050)
 
 # --- 5. Word 生成與計算函數 ---
 doc = Document()
@@ -93,7 +94,6 @@ def build_word_table(doc, op_df):
 
     total_kwh = 0
     for _, row in op_df.iterrows():
-        # 直接拿表格內填寫的 RT 和 台數 計算
         kwh = row["RT"] * row["台數"] * row["效率(kW/RT)"] * row["時數(hr/y)"] * (row["負載率(%)"]/100)
         total_kwh += kwh
         r_cells = table.add_row().cells
@@ -110,7 +110,7 @@ def build_word_table(doc, op_df):
     row_sum[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
     return total_kwh
 
-# --- 執行生成過程 ---
+# --- 執行 Word 生成內容 ---
 # 一、現況
 add_run_kai(doc.add_heading('', level=1), "一、現況說明", size=14, is_bold=True)
 old_desc = "、".join([f"{r['台數']}台{r['容量(RT)']}RT {r['型式']}" for _, r in old_cfg.iterrows()])
@@ -141,27 +141,22 @@ add_run_kai(p5, f"1. 採用高效率離心式冰水主機 {new_desc_word} 台，
 
 total_new_kwh = build_word_table(doc, new_op)
 
-# --- 這裡開始是計算與 Word 生成邏輯 ---
-
-# 1. 計算節電數據
+# --- 核心計算邏輯 (此處不再報錯) ---
 save_kwh = total_old_kwh - total_new_kwh
 save_rate = (save_kwh / total_old_kwh * 100) if total_old_kwh > 0 else 0
 save_money = save_kwh * elec_price / 10000
 
-# 2. 計算抑制需量 (取夏季作為基準)
-# 抓取夏季那一行 (通常是 Index 1)
+# 計算抑制需量 (夏季基準)
 summer_old = old_op.iloc[1]
 summer_new = new_op.iloc[1]
 suppress_demand = (summer_old['RT'] * summer_old['台數'] * summer_old['效率(kW/RT)']) - \
                   (summer_new['RT'] * summer_new['台數'] * summer_new['效率(kW/RT)'])
 
-# 3. 處理投資與回收 (對齊介面上的 invest_amount)
 payback_year = (invest_amount / save_money) if save_money > 0 else 0
 
 # --- Word 總結表格生成 ---
 doc.add_paragraph()
-summary_table = doc.add_table(rows=1, cols=8)
-summary_table.style = 'Table Grid'
+summary_table = doc.add_table(rows=1, cols=8); summary_table.style = 'Table Grid'
 s_headers = ["改善前\n(kWh/年)", "改善後\n(kWh/年)", "節約度數\n(kWh/年)", "節能率\n(%)", "節能電費\n(萬元/年)", "抑制需量\n(kW)", "投資金額\n(萬元)", "回收年限\n(年)"]
 
 for i, h in enumerate(s_headers):
@@ -169,62 +164,35 @@ for i, h in enumerate(s_headers):
     add_run_kai(cp, h, size=9, is_bold=True)
 
 s_row = summary_table.add_row().cells
-s_vals = [
-    f"{total_old_kwh:,.0f}", 
-    f"{total_new_kwh:,.0f}", 
-    f"{save_kwh:,.0f}", 
-    f"{save_rate:.1f}", 
-    f"{save_money:.1f}", 
-    f"{suppress_demand:.1f}", 
-    f"{invest_amount:,.0f}", 
-    f"{payback_year:.1f}"
-]
+s_vals = [f"{total_old_kwh:,.0f}", f"{total_new_kwh:,.0f}", f"{save_kwh:,.0f}", f"{save_rate:.1f}", f"{save_money:.1f}", f"{suppress_demand:.1f}", f"{invest_amount:,.0f}", f"{payback_year:.1f}"]
 for i, v in enumerate(s_vals):
     cp = s_row[i].paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
     add_run_kai(cp, v)
 
-# 表格備註
-note_row = summary_table.add_row().cells
-note_row[0].merge(note_row[7])
-add_run_kai(note_row[0].paragraphs[0], f"註：每度電平均單價 {elec_price:.2f} 元")
-note_row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+# 表格備註與後續說明
+note_row = summary_table.add_row().cells; note_row[0].merge(note_row[7])
+add_run_kai(note_row[0].paragraphs[0], f"註：每度電平均單價 {elec_price:.2f} 元").alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-# 投資與回收文字
 doc.add_paragraph()
 p_invest = doc.add_paragraph(); p_invest.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p_invest, f"2. 投資費用：約 {invest_amount:,.0f} 萬元(僅為 {new_cfg.iloc[0]['台數']} 台主機費用，實際金額仍需經廠商報價)。")
-
 p_payback = doc.add_paragraph(); p_payback.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p_payback, f"3. 回收年限：{invest_amount:,.0f} 萬元 ÷ {save_money:.1f} 萬元/年 ≒ {payback_year:.1f} 年。")
 
-# ---------------------------------------------------------
-# --- 5. 報告輸出中心 (按鈕區塊) ---
-# ---------------------------------------------------------
+# --- 報告輸出中心 ---
 st.markdown("---")
 st.subheader("🚀 報告輸出中心")
-
-# 將當前生成的 doc 轉為二進位數據
 buf = io.BytesIO()
 doc.save(buf)
 current_word_data = buf.getvalue()
 
 col_btn1, col_btn2 = st.columns(2)
-
 with col_btn1:
-    # 同步按鈕
     if st.button("🔄 確認數值並同步至打包中心", use_container_width=True):
         if 'report_warehouse' not in st.session_state:
             st.session_state['report_warehouse'] = {}
         st.session_state['report_warehouse']["4. 冰水主機效益分析"] = current_word_data
-        st.success("✅ 數據已鎖定！左側打包下載已更新。")
+        st.success("✅ 數據已鎖定！")
         st.rerun()
-
 with col_btn2:
-    # 下載按鈕
-    st.download_button(
-        label="💾 下載目前的 Word 報告",
-        data=current_word_data,
-        file_name="冰水主機汰換效益分析.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
+    st.download_button("💾 下載目前的 Word 報告", current_word_data, "冰水主機汰換效益分析.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
