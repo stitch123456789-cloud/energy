@@ -27,13 +27,23 @@ with col1:
     unit_name = st.text_input("單位名稱", value="貴單位")
     setup_year = st.number_input("原主機設置年份 (民國)", value=104)
 with col2:
-    elec_price = st.number_input("平均電費 (元/度)", value=4.48, step=0.01)
+# 1. 先從 Session State 拿自動計算的值，拿不到就用 4.48 (預設值)
+val_from_app = st.session_state.get('auto_avg_price', 4.48)
+
+# 2. 設定輸入框，讓它的預設值 (value) 等於自動抓到的值
+elec_price = st.number_input(
+    "平均電費 (元/度)", 
+    min_value=0.0,
+    value=float(val_from_app), # 自動帶入表五之二的結果
+    step=0.01,
+    key="p4_elec_price"
+)
 
 st.subheader("🧊 現有主機配置")
 # 讓使用者可以填寫多台主機
 df_init = pd.DataFrame([
     {"編號": "CH-1", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"},
-    {"編號": "CH-2", "台數": 1, "容量(RT)": 350, "型式": "螺旋式"}
+    {"編號": "CH-2", "台數": 1, "容量(RT)": 350, "型式": "離心式"}
 ])
 chiller_config = st.data_editor(df_init, num_rows="dynamic", use_container_width=True)
 
