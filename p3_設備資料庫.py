@@ -55,7 +55,7 @@ def fetch_chiller_spec(file):
     try:
         xl = pd.ExcelFile(file)
         # 精確過濾：必須包含「九之一」而且包含「(三)」
-        target_sheets = [s for s in xl.sheet_names if "九之一" in s and "(三)" in s]
+        target_sheets = [s for s in xl.sheet_names if "空調系統(三)" in s]
         if not target_sheets: return None
         
         all_chillers = []
