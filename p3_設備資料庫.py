@@ -347,7 +347,7 @@ if final_file:
         # 在 doc = Document() 下方適當位置
         o_data = fetch_other_systems(final_file)
         if o_data:
-    add_other_systems_table(doc, o_data)
+            add_other_systems_table(doc, o_data)
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
