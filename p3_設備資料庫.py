@@ -292,6 +292,36 @@ def add_other_systems_table(doc, other_data):
             cp = cells[i].paragraphs[0]
             cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             set_font_kai_11(cp.add_run(str(val)))
+def add_site_photos_table(doc):
+    # 標題 5.現場現況照片： (標楷加粗 14號)
+    p = doc.add_paragraph()
+    run = p.add_run("5.現場現況照片：")
+    set_font_kai_bold_14(run)
+
+    # 建立表格 (6列 2欄)
+    items = ["大樓外觀", "冰水主機", "水泵群", "冷卻水塔", "高壓變電站", "空調監控系統"]
+    table = doc.add_table(rows=len(items), cols=2)
+    table.style = 'Table Grid'
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # 設定表格高度與寬度 (預留放照片的空間)
+    from docx.shared import Inches
+    for i, item_name in enumerate(items):
+        row = table.rows[i]
+        # 設定固定高度，避免表格縮在一起 (例如 2.5 英吋)
+        row.height = Inches(2.5)
+        
+        # 左側單元格：填入名稱
+        cell_name = row.cells[0]
+        cell_name.width = Inches(1.5) # 名稱欄位窄一點
+        cell_name.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cp = cell_name.paragraphs[0]
+        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        set_font_kai_11(cp.add_run(item_name))
+
+        # 右側單元格：空白 (預留放照片)
+        cell_photo = row.cells[1]
+        cell_photo.width = Inches(4.5) # 照片欄位寬一點
 # --- 4. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
 c0, c1, c2, c3, c4 = st.columns([0.8, 1.5, 1.2, 1.2, 1.5])
@@ -344,10 +374,17 @@ if final_file:
         if p_data:
             add_pump_section(doc, p_data, has_sec)
             add_cooling_section(doc, p_data)
-        # 在 doc = Document() 下方適當位置
+        # 5. 其他系統
         o_data = fetch_other_systems(final_file)
         if o_data:
             add_other_systems_table(doc, o_data)
+            
+        doc.add_paragraph() # 隔開一行
+        
+        # 6. 現場現況照片 (新增這部分)
+        add_site_photos_table(doc)
+        
+        # 7. 下載檔案
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
