@@ -64,7 +64,8 @@ def fetch_chiller_spec(file):
             for i in range(6, len(df)):
                 name = str(df.iloc[i, 1]).strip() # B: 設備名稱
                 if "主機" not in name: continue
-                
+                # --- 清洗：去除名稱前方的「1. 」數字 ---
+                name = name_raw.split('.')[-1].strip() if '.' in name_raw else name_raw
                 sn = str(df.iloc[i, 2]).strip()      # C: 編號
                 form = str(df.iloc[i, 5]).strip()    # F: 型式
                 inverter_raw = str(df.iloc[i, 7]).strip() # H: 有無 (變頻)
