@@ -370,39 +370,67 @@ st.markdown("---")
 up_file = st.file_uploader("請上傳 Excel", type=["xlsx"])
 final_file = up_file if up_file else st.session_state.get('global_excel')
 
+# --- 5. 下載與打包整合邏輯 ---
+st.markdown("---")
+
 if final_file:
-    if st.button("🚀 生成並下載設備系統報告", use_container_width=True):
+    # 定義一個內部函數，用於即時生成 Word 數據
+    def generate_full_report():
         doc = Document()
         
-        # 1. 照明系統
+        # 1. 執行抓取與生成：照明系統
         l_data = fetch_and_aggregate_lighting(final_file)
-        if l_data: add_lighting_table(doc, l_data)
-        doc.add_paragraph()
+        if l_data:
+            add_lighting_table(doc, l_data)
+            doc.add_paragraph()
         
-        # 2. 空調開啟模式
+        # 2. 執行生成：空調模式
         add_ac_mode_table(doc, ac_rows)
         
-        # 3. 冰水主機規格
+        # 3. 執行抓取與生成：冰水主機規格
         c_data = fetch_chiller_spec(final_file)
-        if c_data: add_chiller_spec_table(doc, c_data)
-        doc.add_paragraph()
+        if c_data:
+            add_chiller_spec_table(doc, c_data)
+            doc.add_paragraph()
         
-        # 4. 冰水管路與冷卻水系統
+        # 4. 執行抓取與生成：泵浦與冷卻水系統
         p_data, has_sec = fetch_pump_and_cooling_data(final_file)
         if p_data:
             add_pump_section(doc, p_data, has_sec)
             add_cooling_section(doc, p_data)
-        # 5. 其他系統
+        
+        # 5. 執行抓取與生成：其他系統
         o_data = fetch_other_systems(final_file)
         if o_data:
             add_other_systems_table(doc, o_data)
-            
-        # 插入分頁符號，讓照片獨立一頁 (如截圖所示)
-        doc.add_page_break()
         
-        # 6. 生成現場照片表格 (大標題 18號，小字 12號，2x3 佈局)
+        # 6. 執行生成：照片頁面 (獨立一頁)
+        doc.add_page_break()
         add_site_photos_table(doc)
-        # 儲存與下載
+        
+        # 輸出成二進位流
         buf = io.BytesIO()
         doc.save(buf)
-        st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
+        word_data = buf.getvalue()
+        
+        # 【重要】同步存入左側打包中心 (report_warehouse)
+        if 'report_warehouse' not in st.session_state:
+            st.session_state['report_warehouse'] = {}
+        st.session_state['report_warehouse']['設備系統報告'] = word_data
+        
+        return word_data
+
+    # 使用 download_button 直接觸發生成並下載
+    st.download_button(
+        label="🚀 生成並直接下載設備系統報告",
+        data=generate_full_report(), # 這裡會呼叫函數並回傳數據
+        file_name="設備報告.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        use_container_width=True
+    )
+    
+    # 提醒文字
+    st.success("✅ 報告數據已同步至『報告輸出中心』，可進行一鍵打包下載。")
+
+else:
+    st.info("💡 請先上傳 Excel 檔案以啟用報告生成功能。")
