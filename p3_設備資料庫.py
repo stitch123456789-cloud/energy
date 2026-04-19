@@ -62,8 +62,8 @@ def fetch_chiller_spec(file):
         for sheet in target_sheets:
             df = pd.read_excel(file, sheet_name=sheet, header=None)
             for i in range(6, len(df)):
-                name = str(df.iloc[i, 1]).strip() # B: 設備名稱
-                if "主機" not in name: continue
+                name_raw = str(df.iloc[i, 1]).strip() # B: 設備名稱
+                if "主機" not in name_raw: continue
                 # --- 清洗：去除名稱前方的「1. 」數字 ---
                 name = name_raw.split('.')[-1].strip() if '.' in name_raw else name_raw
                 sn = str(df.iloc[i, 2]).strip()      # C: 編號
