@@ -155,7 +155,7 @@ def add_chiller_spec_table(doc, chiller_data):
         for i, val in enumerate(row_data):
             p = row_cells[i].paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run(str(val).replace('.0', ''))
-            set_font_kai_11(run, color_red=True) # 仿照圖片設定紅字
+            set_font_kai_11(run) # 此處已修正為預設黑字
 
 # --- 5. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
