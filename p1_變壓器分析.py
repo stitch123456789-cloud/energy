@@ -444,18 +444,41 @@ if all_transformer_data:
         set_font_kai(p6.add_run(f"{(invest_cost/10000):.1f} 萬元 ÷ {(savings_money/10000):.1f} 萬元/年 = "), size=12, color=RGBColor(255, 0, 0)) # 紅字
         set_font_kai(p6.add_run(f"{payback_year:.1f} 年"), size=12, color=RGBColor(255, 0, 0)) # 紅字
         set_font_kai(p6.add_run("(註：回收年限會依報價廠家不同而有所增減)。"), size=12, is_bold=True)
-output = io.BytesIO()
-doc.save(output)
-report_data = output.getvalue()
+# ==========================================================
+# 最終輸出與按鈕邏輯 (兩步確認版)
+# ==========================================================
+st.markdown("---")
+st.subheader("🚀 報告輸出中心")
 
-if 'report_warehouse' in st.session_state:
-    st.session_state['report_warehouse']["1. 變壓器分析報告"] = report_data
+# 定義生成 Word 數據的函數
+def create_p1_word_blob():
+    output = io.BytesIO()
+    doc.save(output)
+    return output.getvalue()
 
-st.success("✅ 變壓器報告已生成！您可以在左側側邊欄打包下載。")
-# 提供單份報告下載按鈕 (確保這兩行也完全靠左)
-st.download_button(
-    label="💾 下載此份變壓器報告",
-    data=report_data,
-    file_name="變壓器汰換效益分析.docx",
-    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
+col_btn1, col_btn2 = st.columns(2)
+
+with col_btn1:
+    # 第一步：按下才同步到左側打包中心
+    if st.button("🔄 確認分析結果並同步至打包中心", use_container_width=True):
+        report_data = create_p1_word_blob()
+        if 'report_warehouse' not in st.session_state:
+            st.session_state['report_warehouse'] = {}
+        
+        # 存入打包中心
+        st.session_state['report_warehouse']["1. 變壓器分析報告"] = report_data
+        st.success("✅ 數據已鎖定並同步，左側打包清單已更新！")
+        st.rerun()
+
+with col_btn2:
+    # 第二步：下載目前的 Word
+    if 'report_warehouse' in st.session_state and "1. 變壓器分析報告" in st.session_state['report_warehouse']:
+        st.download_button(
+            label="💾 下載此份變壓器報告 (Word)",
+            data=st.session_state['report_warehouse']["1. 變壓器分析報告"],
+            file_name="變壓器汰換效益分析.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
+    else:
+        st.button("📥 請先點擊左側確認同步", disabled=True, use_container_width=True)
