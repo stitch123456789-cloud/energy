@@ -21,15 +21,22 @@ st.title("❄️ P4. 冰水主機汰換效益分析")
 
 c1, c2, c3 = st.columns(3)
 # 在基本環境設定那一排加入重置按鈕
+# 在你的 c1 區塊內
 with c1:
     unit_name = st.text_input("單位名稱", value="貴單位")
-    if st.button("♻️ 重置所有表格資料"):
-        # 刪除所有相關的 Session State
-        keys_to_clear = ["old_cfg_data", "new_cfg_data", "old_op_data", "new_op_data", 
-                         "old_cfg_edit", "new_cfg_edit", "old_op_edit", "new_op_edit"]
-        for key in keys_to_clear:
+    if st.button("♻️ 重置所有表格資料", use_container_width=True):
+        # 1. 定義所有需要清除的 Key (包含資料本身與編輯器的 Key)
+        target_keys = [
+            "old_cfg_data", "new_cfg_data", "old_op_data", "new_op_data",
+            "old_cfg_edit", "new_cfg_edit", "old_op_edit", "new_op_edit"
+        ]
+        
+        # 2. 徹底清除
+        for key in target_keys:
             if key in st.session_state:
                 del st.session_state[key]
+        
+        # 3. 強制頁面重整，讓初始化代碼重新執行
         st.rerun()
 with c2:
     val_from_app = st.session_state.get('auto_avg_price', 4.48)
