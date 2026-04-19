@@ -6,7 +6,7 @@ from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
-# --- 1. 字體工具函數 (全黑) ---
+# --- 1. 字體工具函數 ---
 def add_run_kai(paragraph, text, size=12, is_bold=False):
     run = paragraph.add_run(text)
     run.font.name = '標楷體'
@@ -37,26 +37,28 @@ df_init = pd.DataFrame([
 ])
 chiller_config = st.data_editor(df_init, num_rows="dynamic", use_container_width=True, key="ch_cfg_editor")
 
-# --- 第三排：改善方案變數 ---
-st.subheader("⚙️ 改善方案設定")
-col2_1, col2_2 = st.columns(2)
+# --- 第三排：改善方案與效率基準設定 ---
+st.subheader("⚙️ 效率基準與改善設定")
+col2_1, col2_2, col2_3 = st.columns(3)
 with col2_1:
     suggest_ch_name = st.text_input("建議更換主機名稱", value="冰水主機(CH-1)")
 with col2_2:
-    target_eff_default = st.number_input("快速設定：預期改善後效率 (kW/RT)", value=0.50, step=0.01)
+    base_old_eff = st.number_input("現況夏季效率基準 (kW/RT)", value=0.95, step=0.01)
+with col2_3:
+    base_new_eff = st.number_input("改善夏季效率基準 (kW/RT)", value=0.50, step=0.01)
 
-# --- 第四排：核心運轉數據編輯區 (改善前/後皆可修改) ---
-st.subheader("📅 運轉參數設定 (可手動修改表格內數值)")
-st.info("💡 你可以直接點擊下方表格內的任何數值進行修改 (包含現況與改善後的效率)")
+# --- 第四排：核心運轉數據編輯區 (自動計算季節係數) ---
+st.subheader("📅 運轉參數預覽 (已自動套用季節修正係數)")
+st.caption("※ 修正係數：春秋 x0.96 | 冬季 x0.94")
 
 op_data = {
     "季節": ["春秋", "夏季", "冬季"],
     "時數(hr/y)": [2190, 1095, 1095],
     "平均負載率(%)": [60, 70, 50],
-    "現況kW/RT": [0.864, 0.90, 0.846],
-    "改善後kW/RT": [target_eff_default, target_eff_default, target_eff_default] 
+    # 根據你的要求自動計算
+    "現況kW/RT": [round(base_old_eff * 0.96, 3), base_old_eff, round(base_old_eff * 0.94, 3)],
+    "改善後kW/RT": [round(base_new_eff * 0.96, 3), base_new_eff, round(base_new_eff * 0.94, 3)] 
 }
-# 使用 data_editor 讓使用者完整控制所有計算因子
 df_op = st.data_editor(pd.DataFrame(op_data), use_container_width=True, key="op_cfg_editor")
 
 # ---------------------------------------------------------
@@ -90,50 +92,32 @@ def create_energy_table(doc, data_df, rt_val, mode="old"):
     eff_col = "現況kW/RT" if mode == "old" else "改善後kW/RT"
     
     for _, row in data_df.iterrows():
-        # 計算耗電量：RT * 1台 * kW/RT * 時數 * 負載率
         kwh = rt_val * 1 * row[eff_col] * row["時數(hr/y)"] * (row["平均負載率(%)"]/100)
         total_kwh += kwh
         r_cells = table.add_row().cells
-        vals = [
-            row["季節"], 
-            str(rt_val), 
-            "1", 
-            f"{row[eff_col]:.3f}", 
-            f"{row['時數(hr/y)']:,.0f}", 
-            f"{row['平均負載率(%)']}%", 
-            f"{kwh:,.0f}"
-        ]
+        vals = [row["季節"], str(rt_val), "1", f"{row[eff_col]:.3f}", f"{row['時數(hr/y)']:,.0f}", f"{row['平均負載率(%)']}%", f"{kwh:,.0f}"]
         for i, v in enumerate(vals):
             cp = r_cells[i].paragraphs[0]
             cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             add_run_kai(cp, v)
             
-    # 合計列
     row_sum = table.add_row().cells
     row_sum[0].merge(row_sum[5])
-    sum_p = row_sum[0].paragraphs[0]
-    sum_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    add_run_kai(sum_p, "總耗電量(kWh/年)", is_bold=True)
-    
-    sum_val_p = row_sum[6].paragraphs[0]
-    sum_val_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    add_run_kai(sum_val_p, f"{total_kwh:,.0f}", is_bold=True)
+    add_run_kai(row_sum[0].paragraphs[0], "總耗電量(kWh/年)", is_bold=True)
+    row_sum[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_run_kai(row_sum[6].paragraphs[0], f"{total_kwh:,.0f}", is_bold=True)
+    row_sum[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
     return total_kwh
 
-# --- B. 插入改善前表格 ---
+# --- B. 插入表格 ---
 total_old_kwh = create_energy_table(doc, df_op, base_rt, mode="old")
 
 # --- C. 二、改善方案 ---
 doc.add_paragraph()
 add_run_kai(doc.add_heading('', level=1), "二、改善方案", size=14, is_bold=True)
-p2 = doc.add_paragraph()
-p2.paragraph_format.first_line_indent = Pt(24)
-# 這裡的運轉效率取自表格夏季的設定值作為代表
-target_eff_display = df_op.loc[df_op['季節'] == '夏季', '改善後kW/RT'].values[0]
-
-add_run_kai(p2, f"1. 建議編列經費汰換為高效率冰水主機，目前新型高效率 1 級能效離心式冰水主機之運轉效率可達 {target_eff_display:.2f} kW/RT，如與以上大樓現況冰水主機運轉效率相比，有節能空間。")
-p3 = doc.add_paragraph()
-p3.paragraph_format.first_line_indent = Pt(24)
+p2 = doc.add_paragraph(); p2.paragraph_format.first_line_indent = Pt(24)
+add_run_kai(p2, f"1. 建議編列經費汰換為高效率冰水主機，目前新型高效率 1 級能效離心式冰水主機之運轉效率可達 {base_new_eff:.2f} kW/RT，如與以上大樓現況冰水主機運轉效率相比，有節能空間。")
+p3 = doc.add_paragraph(); p3.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p3, f"2. 參考附件建議優先將現況低效率之{suggest_ch_name}，汰換為符合建議標準之冰水主機，以節省主機運轉耗能。")
 
 # --- D. 三、預期效益 ---
@@ -141,18 +125,15 @@ doc.add_paragraph()
 add_run_kai(doc.add_heading('', level=1), "三、預期效益", size=14, is_bold=True)
 doc.add_paragraph().paragraph_format.first_line_indent = Pt(24)
 add_run_kai(doc.paragraphs[-1], "改善後冰水主機耗電量計算如下：")
-p5 = doc.add_paragraph()
-p5.paragraph_format.first_line_indent = Pt(24)
+p5 = doc.add_paragraph(); p5.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p5, f"1. 採用高效率離心式冰水主機 {base_rt}RT×1 台，推估年度耗電量如下表：")
 
-# --- E. 插入改善後表格 ---
 total_new_kwh = create_energy_table(doc, df_op, base_rt, mode="new")
 
-# --- F. 結尾效益文字 ---
+# --- E. 效益結算 ---
 save_kwh = total_old_kwh - total_new_kwh
 save_money = save_kwh * elec_price / 10000
-res_p = doc.add_paragraph()
-res_p.paragraph_format.first_line_indent = Pt(24)
+res_p = doc.add_paragraph(); res_p.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(res_p, f"預估年節電量約 {save_kwh:,.0f} kWh，年節省電費約 {save_money:.1f} 萬元。")
 
 # --- 4. 輸出中心 ---
@@ -168,14 +149,7 @@ with col_btn1:
         if 'report_warehouse' not in st.session_state:
             st.session_state['report_warehouse'] = {}
         st.session_state['report_warehouse']["4. 冰水主機效益分析"] = current_word_data
-        st.success("✅ 數據已鎖定並同步！")
+        st.success("✅ 數據已同步！")
         st.rerun()
-
 with col_btn2:
-    st.download_button(
-        label="💾 下載目前的 Word 報告",
-        data=current_word_data,
-        file_name="冰水主機汰換效益分析.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
+    st.download_button("💾 下載目前的 Word 報告", current_word_data, "冰水主機汰換效益分析.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
