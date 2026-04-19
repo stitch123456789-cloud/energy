@@ -397,7 +397,7 @@ if final_file:
         doc.add_page_break()
         
         # 6. 生成現場照片表格 (大標題 18號，小字 12號，2x3 佈局)
-            add_site_photos_table(doc)
+        add_site_photos_table(doc)
         # 儲存與下載
         buf = io.BytesIO()
         doc.save(buf)
