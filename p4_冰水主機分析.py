@@ -136,33 +136,34 @@ if st.button("🚀 生成 P4 效益報告並同步"):
 
     # 同步到打包中心
    # ... (前面的 Word 生成邏輯保持不變) ...
+# ... (前面的 Word 生成邏輯保持不變) ...
 
     # 同步與下載按鈕區塊
     st.markdown("---")
-    col_btn1, col_btn2 = st.columns(2)
+    st.subheader("🚀 報告輸出中心")
 
+    # 預先生成目前的 Word 數據
     buf = io.BytesIO()
     doc.save(buf)
     report_data = buf.getvalue()
 
+    col_btn1, col_btn2 = st.columns(2)
+
     with col_btn1:
-        # 第一步：確認數值並存入打包中心
+        # 按鈕 1：同步到打包中心
         if st.button("🔄 確認數值並同步至打包中心", use_container_width=True):
             if 'report_warehouse' not in st.session_state:
                 st.session_state['report_warehouse'] = {}
             st.session_state['report_warehouse']["4. 冰水主機效益分析"] = report_data
-            st.success("✅ 數據已鎖定，左側打包下載已更新！")
+            st.success("✅ 數據已同步至左側打包中心！")
             st.rerun()
 
     with col_btn2:
-        # 第二步：直接下載 (只有在 session 裡有資料時才顯示)
-        if 'report_warehouse' in st.session_state and "4. 冰水主機效益分析" in st.session_state['report_warehouse']:
-            st.download_button(
-                label="📥 下載目前的 Word 報告",
-                data=st.session_state['report_warehouse']["4. 冰水主機效益分析"],
-                file_name="冰水主機汰換效益分析.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
-        else:
-            st.button("📥 請先點擊左側確認同步", disabled=True, use_container_width=True)
+        # 按鈕 2：直接下載 (不再受條件限制，直接顯示)
+        st.download_button(
+            label="💾 下載目前的 Word 報告",
+            data=report_data,  # 直接使用剛剛生成的 report_data
+            file_name="冰水主機汰換效益分析.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
