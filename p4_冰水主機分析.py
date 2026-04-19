@@ -22,22 +22,68 @@ st.title("❄️ P4. 冰水主機汰換效益分析")
 c1, c2, c3 = st.columns(3)
 # 在基本環境設定那一排加入重置按鈕
 # 在你的 c1 區塊內
+# --- 1. 徹底重置功能 ---
+# 注意：重置按鈕放在輸入框下方，並確保清除所有 Key
 with c1:
     unit_name = st.text_input("單位名稱", value="貴單位")
     if st.button("♻️ 重置所有表格資料", use_container_width=True):
-        # 1. 定義所有需要清除的 Key (包含資料本身與編輯器的 Key)
-        target_keys = [
+        # 列出所有在程式中使用的 session_state keys
+        keys_to_clear = [
             "old_cfg_data", "new_cfg_data", "old_op_data", "new_op_data",
             "old_cfg_edit", "new_cfg_edit", "old_op_edit", "new_op_edit"
         ]
-        
-        # 2. 徹底清除
-        for key in target_keys:
-            if key in st.session_state:
-                del st.session_state[key]
-        
-        # 3. 強制頁面重整，讓初始化代碼重新執行
+        for k in keys_to_clear:
+            if k in st.session_state:
+                del st.session_state[k]
         st.rerun()
+
+# --- 2. 初始化 Session State (如果不存在則建立) ---
+if "old_cfg_data" not in st.session_state:
+    st.session_state.old_cfg_data = pd.DataFrame([{"編號": "CH-1", "台數": 2, "容量(RT)": 500, "型式": "螺旋式"}])
+
+if "new_cfg_data" not in st.session_state:
+    st.session_state.new_cfg_data = st.session_state.old_cfg_data.copy()
+    st.session_state.new_cfg_data.at[0, "型式"] = "離心式"
+
+if "old_op_data" not in st.session_state:
+    st.session_state.old_op_data = pd.DataFrame({
+        "季節": ["春秋", "夏季", "冬季"],
+        "RT": [500, 500, 500],
+        "台數": [1, 1, 1],
+        "時數(hr/y)": [4380, 1095, 1095],
+        "負載率(%)": [70, 80, 50],
+        "效率(kW/RT)": [round(base_old_eff*0.96,3), base_old_eff, round(base_old_eff*0.94,3)]
+    })
+
+if "new_op_data" not in st.session_state:
+    st.session_state.new_op_data = st.session_state.old_op_data.copy()
+    st.session_state.new_op_data["效率(kW/RT)"] = [round(base_new_eff*0.96,3), base_new_eff, round(base_new_eff*0.94,3)]
+
+# --- 3. 介面表格 (使用上述 Session State 作為資料源) ---
+left_col, right_col = st.columns(2)
+
+with left_col:
+    st.subheader("🧊 1. 改善前 (現況)")
+    # 使用 st.session_state.old_cfg_data 確保重置後能抓到初始值
+    old_cfg = st.data_editor(st.session_state.old_cfg_data, num_rows="dynamic", use_container_width=True, key="old_cfg_edit")
+    old_op = st.data_editor(st.session_state.old_op_data, use_container_width=True, key="old_op_edit")
+
+    # 同步邏輯：如果資料發生變動，存回 session_state 並同步至右側
+    if not old_op.equals(st.session_state.old_op_data):
+        st.session_state.old_op_data = old_op
+        # 同步 RT, 台數, 時數, 負載率 到右邊
+        for col in ["RT", "台數", "時數(hr/y)", "負載率(%)"]:
+            st.session_state.new_op_data[col] = old_op[col]
+        st.rerun()
+
+with right_col:
+    st.subheader("✨ 2. 改善後 (預期)")
+    new_cfg = st.data_editor(st.session_state.new_cfg_data, num_rows="dynamic", use_container_width=True, key="new_cfg_edit")
+    new_op = st.data_editor(st.session_state.new_op_data, use_container_width=True, key="new_op_edit")
+    
+    # 這裡也要更新，否則手動修改會被同步邏輯蓋掉
+    st.session_state.new_op_data = new_op
+    st.session_state.new_cfg_data = new_cfg
 with c2:
     val_from_app = st.session_state.get('auto_avg_price', 4.48)
     elec_price = st.number_input("平均電費 (元/度)", value=float(val_from_app), step=0.01)
