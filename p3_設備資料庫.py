@@ -4,6 +4,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, RGBColor, Inches  # 確保導入 Inches
 import io
 
 # --- 1. 字體與格式函數 ---
@@ -333,7 +334,10 @@ def add_site_photos_table(doc):
             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
             run.font.size = Pt(12)
             run.font.bold = False
-
+# 自動調整欄寬 (總寬約 6 英吋)
+    for row in table.rows:
+        for cell in row.cells:
+            cell.width = Inches(3.0)
     # 在表格最後加上分節符號
     doc.add_page_break()
 # --- 4. Streamlit 介面 ---
