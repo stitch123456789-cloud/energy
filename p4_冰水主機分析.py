@@ -141,26 +141,62 @@ add_run_kai(p5, f"1. 採用高效率離心式冰水主機 {new_desc_word} 台，
 
 total_new_kwh = build_word_table(doc, new_op)
 
-# 效益結算
+# --- F. 效益結算與總結表格 ---
 save_kwh = total_old_kwh - total_new_kwh
+save_rate = (save_kwh / total_old_kwh * 100) if total_old_kwh > 0 else 0
 save_money = save_kwh * elec_price / 10000
-res_p = doc.add_paragraph(); res_p.paragraph_format.first_line_indent = Pt(24)
-add_run_kai(res_p, f"預估年節電量約 {save_kwh:,.0f} kWh，年節省電費約 {save_money:.1f} 萬元。")
 
-# --- 6. 輸出中心 ---
+# 假設：抑制需量 (kW) = 總RT * (舊平均效率 - 新平均效率)
+# 這是一個業界常用的推估值
+sum_rt_old = sum(old_op['RT'] * old_op['台數']) / 3 # 取季節平均
+avg_old_eff = old_op['效率(kW/RT)'].mean()
+avg_new_eff = new_op['效率(kW/RT)'].mean()
+suppress_demand = sum_rt_old * (avg_old_eff - avg_new_eff)
+
+# 投資金額設定 (您可以考慮在介面增加一個輸入框，這裡先預設為 1050 萬元)
+invest_amount = st.number_input("請輸入預估投資金額 (萬元)", value=1050)
+payback_year = (invest_amount / save_money) if save_money > 0 else 0
+
+# 1. 插入總結表格
+doc.add_paragraph()
+summary_table = doc.add_table(rows=1, cols=8)
+summary_table.style = 'Table Grid'
+s_headers = ["改善前\n(kWh/年)", "改善後\n(kWh/年)", "節約度數\n(kWh/年)", "節能率\n(%)", "節能電費\n(萬元/年)", "抑制需量\n(kW)", "投資金額\n(萬元)", "回收年限\n(年)"]
+
+for i, h in enumerate(s_headers):
+    cp = summary_table.cell(0,i).paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_run_kai(cp, h, size=9, is_bold=True)
+
+s_row = summary_table.add_row().cells
+s_vals = [
+    f"{total_old_kwh:,.0f}", 
+    f"{total_new_kwh:,.0f}", 
+    f"{save_kwh:,.0f}", 
+    f"{save_rate:.1f}", 
+    f"{save_money:.1f}", 
+    f"{suppress_demand:.0f}", 
+    f"{invest_amount:,.0f}", 
+    f"{payback_year:.1f}"
+]
+for i, v in enumerate(s_vals):
+    cp = s_row[i].paragraphs[0]; cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    add_run_kai(cp, v)
+
+# 表格備註：平均單價
+note_row = summary_table.add_row().cells
+note_row[0].merge(note_row[3])
+add_run_kai(note_row[0].paragraphs[0], f"註：每度電平均單價 {elec_price:.2f} 元")
+note_row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+# 2. 補上下方的投資與回收說明文字
+doc.add_paragraph()
+p_invest = doc.add_paragraph(); p_invest.paragraph_format.first_line_indent = Pt(24)
+add_run_kai(p_invest, f"2. 投資費用：約 {invest_amount:,.0f} 萬元(僅為 {new_cfg.iloc[0]['台數']} 台主機費用，實際金額仍需經廠商報價)。")
+
+p_payback = doc.add_paragraph(); p_payback.paragraph_format.first_line_indent = Pt(24)
+add_run_kai(p_payback, f"3. 回收年限：{invest_amount:,.0f} 萬元 ÷ {save_money:.1f} 萬元/年 ≒ {payback_year:.1f} 年。")
+
+# --- G. 輸出中心 (維持不變) ---
 st.markdown("---")
 st.subheader("🚀 報告輸出中心")
-buf = io.BytesIO()
-doc.save(buf)
-current_word_data = buf.getvalue()
-
-col_btn1, col_btn2 = st.columns(2)
-with col_btn1:
-    if st.button("🔄 確認數值並同步至打包中心", use_container_width=True):
-        if 'report_warehouse' not in st.session_state:
-            st.session_state['report_warehouse'] = {}
-        st.session_state['report_warehouse']["4. 冰水主機效益分析"] = current_word_data
-        st.success("✅ 數據已鎖定！")
-        st.rerun()
-with col_btn2:
-    st.download_button("💾 下載目前的 Word 報告", current_word_data, "冰水主機汰換效益分析.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+# ... (後面的代碼相同)
