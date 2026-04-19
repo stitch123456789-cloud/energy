@@ -394,12 +394,13 @@ if final_file:
         if o_data:
             add_other_systems_table(doc, o_data)
             
-        doc.add_paragraph() # 隔開一行
+        # 插入分頁符號，讓照片獨立一頁 (如截圖所示)
+        doc.add_page_break()
         
-        # 6. 現場現況照片 (新增這部分)
+        # 6. 生成現場照片表格 (大標題 18號，小字 12號，2x3 佈局)
         add_site_photos_table(doc)
         
-        # 7. 下載檔案
+        # 儲存與下載
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
