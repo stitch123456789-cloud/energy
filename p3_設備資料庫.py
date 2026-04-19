@@ -374,63 +374,64 @@ final_file = up_file if up_file else st.session_state.get('global_excel')
 st.markdown("---")
 
 if final_file:
-    # 定義一個內部函數，用於即時生成 Word 數據
-    def generate_full_report():
+    # 建立一個生成 Word 的函數 (供按鈕使用)
+    def create_word_blob():
         doc = Document()
-        
-        # 1. 執行抓取與生成：照明系統
+        # 1. 照明系統
         l_data = fetch_and_aggregate_lighting(final_file)
         if l_data:
             add_lighting_table(doc, l_data)
             doc.add_paragraph()
-        
-        # 2. 執行生成：空調模式
+        # 2. 空調模式
         add_ac_mode_table(doc, ac_rows)
-        
-        # 3. 執行抓取與生成：冰水主機規格
+        # 3. 冰水主機規格
         c_data = fetch_chiller_spec(final_file)
         if c_data:
             add_chiller_spec_table(doc, c_data)
             doc.add_paragraph()
-        
-        # 4. 執行抓取與生成：泵浦與冷卻水系統
+        # 4. 泵浦與冷卻水系統
         p_data, has_sec = fetch_pump_and_cooling_data(final_file)
         if p_data:
             add_pump_section(doc, p_data, has_sec)
             add_cooling_section(doc, p_data)
-        
-        # 5. 執行抓取與生成：其他系統
+        # 5. 其他系統
         o_data = fetch_other_systems(final_file)
         if o_data:
             add_other_systems_table(doc, o_data)
-        
-        # 6. 執行生成：照片頁面 (獨立一頁)
+        # 6. 照片頁面
         doc.add_page_break()
         add_site_photos_table(doc)
-        
-        # 輸出成二進位流
+
         buf = io.BytesIO()
         doc.save(buf)
-        word_data = buf.getvalue()
-        
-        # 【重要】同步存入左側打包中心 (report_warehouse)
-        if 'report_warehouse' not in st.session_state:
-            st.session_state['report_warehouse'] = {}
-        st.session_state['report_warehouse']['設備系統報告'] = word_data
-        
-        return word_data
+        return buf.getvalue()
 
-    # 使用 download_button 直接觸發生成並下載
-    st.download_button(
-        label="🚀 生成並直接下載設備系統報告",
-        data=generate_full_report(), # 這裡會呼叫函數並回傳數據
-        file_name="設備報告.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
-    
-    # 提醒文字
-    st.success("✅ 報告數據已同步至『報告輸出中心』，可進行一鍵打包下載。")
+    # --- 關鍵修正：兩步操作 ---
+    col_btn1, col_btn2 = st.columns(2)
+
+    with col_btn1:
+        # 第一步：確認數值並存入打包中心
+        if st.button("🔄 確認數值並同步至打包中心", use_container_width=True):
+            word_data = create_word_blob()
+            if 'report_warehouse' not in st.session_state:
+                st.session_state['report_warehouse'] = {}
+            # 存入打包中心
+            st.session_state['report_warehouse']['設備系統報告'] = word_data
+            st.success("✅ 數據已鎖定，左側打包下載已更新！")
+            st.rerun() # 強制重新整理讓左側數量更新
+
+    with col_btn2:
+        # 第二步：下載 (只有同步過後才能下載)
+        if 'report_warehouse' in st.session_state and '設備系統報告' in st.session_state['report_warehouse']:
+            st.download_button(
+                label="📥 下載目前的 Word 報告",
+                data=st.session_state['report_warehouse']['設備系統報告'],
+                file_name="設備報告.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+        else:
+            st.button("📥 請先點擊左側確認同步", disabled=True, use_container_width=True)
 
 else:
     st.info("💡 請先上傳 Excel 檔案以啟用報告生成功能。")
