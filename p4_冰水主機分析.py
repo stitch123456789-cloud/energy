@@ -20,8 +20,17 @@ def add_run_kai(paragraph, text, size=12, is_bold=False):
 st.title("❄️ P4. 冰水主機汰換效益分析")
 
 c1, c2, c3 = st.columns(3)
+# 在基本環境設定那一排加入重置按鈕
 with c1:
     unit_name = st.text_input("單位名稱", value="貴單位")
+    if st.button("♻️ 重置所有表格資料"):
+        # 刪除所有相關的 Session State
+        keys_to_clear = ["old_cfg_data", "new_cfg_data", "old_op_data", "new_op_data", 
+                         "old_cfg_edit", "new_cfg_edit", "old_op_edit", "new_op_edit"]
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
 with c2:
     val_from_app = st.session_state.get('auto_avg_price', 4.48)
     elec_price = st.number_input("平均電費 (元/度)", value=float(val_from_app), step=0.01)
@@ -95,6 +104,9 @@ def build_word_table(doc, op_df):
     total_kwh = 0
     for _, row in op_df.iterrows():
         kwh = row["RT"] * row["台數"] * row["效率(kW/RT)"] * row["時數(hr/y)"] * (row["負載率(%)"]/100)
+        clean_df = op_df.dropna(subset=["RT", "台數", "時數(hr/y)"])
+    
+    for _, row in clean_df.iterrows():
         total_kwh += kwh
         r_cells = table.add_row().cells
         vals = [row["季節"], f"{row['RT']:,.0f}", f"{row['台數']:,.0f}", f"{row['效率(kW/RT)']:.3f}", f"{row['時數(hr/y)']:,.0f}", f"{row['負載率(%)']}%", f"{kwh:,.0f}"]
