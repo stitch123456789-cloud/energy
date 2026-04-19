@@ -92,7 +92,56 @@ def fetch_chiller_spec(file):
                 all_chillers.append([name, sn, form, volt, power, clean_year, rt_val, qty, type_tag])
         return all_chillers
     except: return None
+def fetch_pump_data(file):
+    try:
+        xl = pd.ExcelFile(file)
+        target_sheets = [s for s in xl.sheet_names if "空調系統(三)" in s]
+        if not target_sheets: return None, False
+        
+        pumps = {"冰水泵": [], "區域水泵": [], "冷卻水泵": []}
+        has_secondary = False # 判定是否有區域水泵
+        
+        for sheet in target_sheets:
+            df = pd.read_excel(file, sheet_name=sheet, header=None)
+            for i in range(6, len(df)):
+                name = str(df.iloc[i, 1]).strip() # B: 設備名稱
+                # 判定是否為泵浦
+                target_key = None
+                if "冰水泵" in name: target_key = "冰水泵"
+                elif "區域水泵" in name: 
+                    target_key = "區域水泵"
+                    has_secondary = True # 偵測到區域水泵，觸發 /二次 顯示
+                elif "冷卻水泵" in name: target_key = "冷卻水泵"
+                
+                if not target_key: continue
+                
+                sn = str(df.iloc[i, 2]).strip()      # C: 編號
+                inv_raw = str(df.iloc[i, 7]).strip() # H: 變頻判定
+                flow_val = str(df.iloc[i, 14]).strip() # O: 流量數值
+                flow_unit = str(df.iloc[i, 15]).strip()# P: 流量單位
+                hp_val = str(df.iloc[i, 18]).strip()   # S: 馬力 (HP)
+                qty = str(df.iloc[i, 21]).strip()    # V: 數量
+                
+                if flow_val == "nan" or hp_val == "nan": continue
 
+                # A. 流量單位換算 (GPM -> LPM)
+                try:
+                    f_val = float(flow_val.replace(',', ''))
+                    lpm = round(f_val * 3.785, 0) if "GPM" in flow_unit.upper() else f_val
+                    hp = float(hp_val)
+                except: continue
+
+                # B. 揚程推算 (馬達效率 62%)
+                # 公式: H = (HP * 746 * 0.62) / ( (LPM/60) * 9.8 )
+                try:
+                    head = round((hp * 462.52) / (lpm / 60 * 9.8), 1) if lpm > 0 else 0
+                except: head = 0
+                
+                type_tag = "變頻" if inv_raw == "有" else "定頻"
+                pumps[target_key].append([sn, int(hp), int(lpm), head, qty, type_tag])
+                
+        return pumps, has_secondary
+    except: return None, False
 # --- 4. Word 生成函數 ---
 
 def add_lighting_table(doc, lighting_data):
@@ -157,7 +206,64 @@ def add_chiller_spec_table(doc, chiller_data):
             p = row_cells[i].paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run(str(val).replace('.0', ''))
             set_font_kai_11(run) # 此處已修正為預設黑字
+def add_pump_section(doc, pump_data, has_secondary):
+    # (3) 冰水管路系統
+    p3 = doc.add_paragraph()
+    run3 = p3.add_run("(3) 冰水管路系統：")
+    set_font_kai_bold_14(run3)
 
+    # 側向系統文字判定
+    side_text = "採一/二次側系統設計" if has_secondary else "採一次側系統設計"
+    p_side = doc.add_paragraph()
+    p_side.paragraph_format.left_indent = Pt(40)
+    run_side = p_side.add_run(f"{side_text}，設備規格說明如下表所示")
+    set_font_kai_11(run_side)
+
+    # 依序生成 冰水泵、區域水泵、冷卻水泵 的表格
+    for p_name in ["冰水泵", "區域水泵", "冷卻水泵"]:
+        items = pump_data.get(p_name, [])
+        if not items: continue
+
+        # 小標題 (置中)
+        sub_p = doc.add_paragraph()
+        sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_sub = sub_p.add_run(p_name)
+        set_font_kai_11(run_sub)
+
+        # 建立表格
+        table = doc.add_table(rows=2, cols=6)
+        table.style = 'Table Grid'
+        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # 垂直合併第一欄與最後一欄
+        table.cell(0, 0).merge(table.cell(1, 0)) # 設備編號
+        table.cell(0, 5).merge(table.cell(1, 5)) # 備註
+        
+        headers = [
+            (table.cell(0, 0), "設備編號"),
+            (table.cell(0, 1), "額定馬力\n(HP)"),
+            (table.cell(0, 2), "額定流量\n(LPM)"),
+            (table.cell(0, 3), "揚程\n(m)"),
+            (table.cell(0, 4), "數量\n(台)"),
+            (table.cell(0, 5), "備註")
+        ]
+        
+        for cell, txt in headers:
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(txt)
+            set_font_kai_11(run)
+
+        # 填入數據
+        for row_vals in items:
+            row_cells = table.add_row().cells
+            for idx, val in enumerate(row_vals):
+                p = row_cells[idx].paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = p.add_run(str(val))
+                set_font_kai_11(run)
+        
+        doc.add_paragraph() # 表格間距
 # --- 5. Streamlit 介面 ---
 st.subheader("⚙️ 設備系統資料庫")
 
@@ -212,7 +318,10 @@ if final_file:
         # 3. 冰水主機規格
         c_data = fetch_chiller_spec(final_file)
         if c_data: add_chiller_spec_table(doc, c_data)
-        
+        # 4. 冰水管路 (新加入)
+    pump_data, has_sec = fetch_pump_data(final_file)
+    if pump_data:
+        add_pump_section(doc, pump_data, has_sec)
         buf = io.BytesIO()
         doc.save(buf)
         st.download_button("📥 下載 Word 報告", buf.getvalue(), "設備報告.docx", use_container_width=True)
