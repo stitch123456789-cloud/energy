@@ -104,7 +104,6 @@ def fetch_pump_and_cooling_data(file):
                 unit = str(df.iloc[i, 15]).strip().upper()
                 hp_val = str(df.iloc[i, 18]).strip()
                 qty = str(df.iloc[i, 21]).strip()
-                
                 if cap_val == "nan" or hp_val == "nan": continue
 
                 if "冰水泵" in name or "區域水泵" in name or "冷卻水泵" in name:
@@ -398,8 +397,7 @@ if final_file:
         doc.add_page_break()
         
         # 6. 生成現場照片表格 (大標題 18號，小字 12號，2x3 佈局)
-        add_site_photos_table(doc)
-        
+            add_site_photos_table(doc)
         # 儲存與下載
         buf = io.BytesIO()
         doc.save(buf)
