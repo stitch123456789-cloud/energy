@@ -132,7 +132,9 @@ def build_word_table(doc, op_df):
 
 # --- 執行 Word 生成內容 ---
 # 一、現況
-add_run_kai(doc.add_heading('', level=1), "一、現況說明", size=14, is_bold=True)
+# 一、現況
+p_title1 = doc.add_paragraph()
+add_run_kai(p_title1, "一、現況說明", size=14, is_bold=True)
 old_desc = "、".join([f"{r['台數']}台{r['容量(RT)']}RT {r['型式']}" for _, r in old_cfg.iterrows()])
 p1 = doc.add_paragraph(); p1.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p1, f"1. {unit_name}空調系統有{old_desc}冰水主機(設置年份{setup_year}年)，推估年度耗電量如下表：")
@@ -142,16 +144,18 @@ p_old_sum = doc.add_paragraph(); p_old_sum.paragraph_format.first_line_indent = 
 add_run_kai(p_old_sum, f"2.推估耗電量：{total_old_kwh:,.0f} kWh/年。")
 
 # 二、改善方案
-doc.add_paragraph()
-add_run_kai(doc.add_heading('', level=1), "二、改善方案", size=14, is_bold=True)
+# 二、改善方案
+p_title2 = doc.add_paragraph()
+add_run_kai(p_title2, "二、改善方案", size=14, is_bold=True)
 p2 = doc.add_paragraph(); p2.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p2, f"1. 建議編列經費汰換為高效率冰水主機，目前新型高效率 1 級能效離心式冰水主機之運轉效率可達 {base_new_eff:.2f} kW/RT，如與以上大樓現況冰水主機運轉效率相比，有節能空間。")
 p3 = doc.add_paragraph(); p3.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p3, f"2.參考(附件A-4)『冰水機組製冷能源效率分級基準表』，擬建議貴單位優先將現況低效率之冰水主機{suggest_ch_name}，汰換為符合建議標準的冰水主機，以節省主機運轉耗能。")
 
 # 三、預期效益
-doc.add_paragraph()
-add_run_kai(doc.add_heading('', level=1), "三、預期效益", size=14, is_bold=True)
+# 三、預期效益
+p_title3 = doc.add_paragraph()
+add_run_kai(p_title3, "三、預期效益", size=14, is_bold=True)
 p_res_title = doc.add_paragraph(); p_res_title.paragraph_format.first_line_indent = Pt(24)
 add_run_kai(p_res_title, "改善後冰水主機耗電量計算如下：")
 
