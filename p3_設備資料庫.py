@@ -357,9 +357,9 @@ with c3:
     ld_sp = st.number_input("春負", min_value=0, max_value=100, value=70, key="ld_sp")
     ld_w = st.number_input("冬負", min_value=0, max_value=100, value=60, key="ld_w")
 with c4:
-    tp_s = st.number_input("夏溫", min_value=0, value=7, key="tp_s")
-    tp_sp = st.number_input("春溫", min_value=0, value=7, key="tp_sp")
-    tp_w = st.number_input("冬溫", min_value=0, value=7, key="tp_w")
+    tp_s = st.number_input("夏溫", min_value=0.0, value=7.0, key="tp_s")
+    tp_sp = st.number_input("春溫", min_value=0.0, value=7.0, key="tp_sp")
+    tp_w = st.number_input("冬溫", min_value=0.0, value=7.0, key="tp_w")
 
 ac_rows = [
     ["夏季", rt_s, ct_s, f"{ld_s}%", round(rt_s*ld_s/100, 1), tp_s],
