@@ -79,68 +79,35 @@ def build_report(res):
         st.error("找不到 template_p5.docx")
         return None
 
-    # 此處字典的 Key 必須跟 Word 裡的紅色文字完全一樣
-    d_map = {
+# --- 在 p5_風車加裝變頻器.py 的生成報告函數內 ---
+
+def generate_step_by_step(res):
+    doc = Document("template_p5.docx")
+    
+    # 建立精準對應字典
+    # 這裡的 Key 必須跟你 Word 裡的紅字完全一樣
+    data_map = {
         "{{貴單位}}": unit_name,
-        "{{OLD_KWH}}": f"{res['old_total']:,.0f}",
-        "{{SAVE_KWH}}": f"{res['save_kwh']:,.0f}",
-        "{{SAVE_RATE}}": f"{res['save_rate']:.1f}",
-        "{{SAVE_MONEY}}": f"{res['save_money']:.2f}",
-        "{{INVEST}}": f"{invest_amt:.1f}",
-        "{{PAYBACK}}": f"{res['payback']:.1f}"
+        "{{COUNT}}": str(2), # 如果是固定值也可以直接寫死
+        "{{CH_INFO}}": "CH-1",
+        "{{RT_INFO}}": "1200RT",
+        "{{MOTOR_INFO}}": "三台 15hp",
+        "{{OP_NOTE}}": "僅開啟一台"
     }
 
-    # 1. 處理段落文字替換
+    # 執行「不傷格式」的替換
     for p in doc.paragraphs:
-        # 替換文字標籤
-        for k, v in d_map.items():
-            if k in p.text:
+        for key, val in data_map.items():
+            if key in p.text:
+                # 只有當標籤存在於這個段落時，才去拆解內部的 Runs
                 for run in p.runs:
-                    if k in run.text:
-                        run.text = run.text.replace(k, str(v))
-                        fix_run_format(run)
-        
-        # 插入現況表格 [[OLD_TABLE]]
-        if "[[OLD_TABLE]]" in p.text:
-            p.text = "" # 刪除標籤文字
-            table = doc.add_table(rows=1, cols=4)
-            table.style = 'Table Grid'
-            hdr = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
-            for i, h in enumerate(hdr):
-                table.cell(0, i).text = h
-                fix_run_format(table.cell(0, i).paragraphs[0].runs[0], is_bold=True)
-            for d in res['details']:
-                row = table.add_row().cells
-                row[0].text = d['季節']; row[1].text = f"{d['時數']:,.0f}"; row[2].text = "100%"; row[3].text = f"{d['舊耗電']:,.0f}"
-                for cell in row: fix_run_format(cell.paragraphs[0].runs[0], size=10)
-            tot = table.add_row().cells; tot[0].text = "合計"; tot[3].text = f"{res['old_total']:,.0f}"
-            fix_run_format(tot[0].paragraphs[0].runs[0], is_bold=True); fix_run_format(tot[3].paragraphs[0].runs[0], is_bold=True)
-
-        # 插入效益表格 [[NEW_TABLE]]
-        if "[[NEW_TABLE]]" in p.text:
-            p.text = "" # 刪除標籤文字
-            table = doc.add_table(rows=1, cols=5)
-            table.style = 'Table Grid'
-            hdr = ["季節", "時數(hr)", "負載(%)", "預期耗電", "節電量(kWh)"]
-            for i, h in enumerate(hdr):
-                table.cell(0, i).text = h
-                fix_run_format(table.cell(0, i).paragraphs[0].runs[0], is_bold=True)
-            for d in res['details']:
-                row = table.add_row().cells
-                row[0].text = d['季節']; row[1].text = f"{d['時數']:,.0f}"; row[2].text = d['負載']
-                row[3].text = f"{d['新耗電']:,.0f}"; row[4].text = f"{d['節電']:,.0f}"
-                for cell in row: fix_run_format(cell.paragraphs[0].runs[0], size=10)
-            tot = table.add_row().cells; tot[0].text = "合計"; tot[4].text = f"{res['save_kwh']:,.0f}"
-            fix_run_format(tot[0].paragraphs[0].runs[0], is_bold=True); fix_run_format(tot[4].paragraphs[0].runs[0], is_bold=True)
-
-    # 2. 處理表格內的文字替換 (例如回收年限格子裡的 {{}})
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for k, v in d_map.items():
-                    if k in cell.text:
-                        cell.text = cell.text.replace(k, str(v))
-                        if cell.paragraphs: fix_run_format(cell.paragraphs[0].runs[0], size=10)
+                    if key in run.text:
+                        # 替換文字
+                        run.text = run.text.replace(key, val)
+                        # 強制修正顏色與字體 (這會覆蓋你的紅色，變成黑色)
+                        run.font.color.rgb = RGBColor(0, 0, 0)
+                        run.font.name = '標楷體'
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
     return doc
 
