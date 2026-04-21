@@ -96,12 +96,18 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
         }
 
         # --- A. 優先處理表格插入 (OLD_TABLE & NEW_TABLE) ---
-        for p in doc.paragraphs:
-            if "[[OLD_TABLE]]" in p.text:
-                p.text = "" 
-                table = doc.add_table(rows=1, cols=4)
-                table.style = 'Table Grid'
-                hdr = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
+        # --- 修正版的標籤偵測邏輯 ---
+
+for p in doc.paragraphs:
+    # 這裡使用 join 或是直接檢查 text，並清除掉可能干擾的隱形空白
+    full_text = "".join(run.text for run in p.runs).strip()
+    
+    if "[[OLD_TABLE]]" in full_text or "OLD_TABLE" in full_text:
+        p.text = "" # 徹底清空該行
+        # 在這裡執行插入表格的動作...
+        table = doc.add_table(rows=1, cols=4)
+        # (後續填表代碼...)
+        st.write("找到舊表格標籤並已處理") # 網頁端除錯用
                 for i, text in enumerate(hdr):
                     table.cell(0, i).text = text
                     fix_cell_format(table.cell(0, i), is_bold=True)
