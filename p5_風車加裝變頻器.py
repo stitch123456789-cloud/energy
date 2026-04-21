@@ -23,20 +23,15 @@ def set_table_border(table):
             borders.append(edge)
         ptr.append(borders)
 
-def fix_cell_format(cell, size=10, is_bold=False, align_center=True):
-    """對齊截圖格式：標楷體、字體大小、是否粗體"""
-    for paragraph in cell.paragraphs:
-        if align_center:
-            paragraph.alignment = 1 # 置中對齊
-        if not paragraph.runs:
-            paragraph.add_run()
-        for run in paragraph.runs:
-            run.font.name = '標楷體'
-            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-            run.font.size = Pt(size)
-            run.font.bold = is_bold
-            run.font.color.rgb = RGBColor(0, 0, 0)
-
+def fix_cell(cell, text, is_bold=False, size=10):
+    p = cell.paragraphs[0]
+    p.alignment = 1 # 置中
+    run = p.add_run(str(text))
+    run.font.name = '標楷體'
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+    run.font.size = Pt(size)
+    run.font.bold = is_bold
+    run.font.color.rgb = RGBColor(0, 0, 0)
 def safe_replace(doc, data_map):
     """您原本測試成功的替換工具：處理段落與看板表格"""
     for p in doc.paragraphs:
