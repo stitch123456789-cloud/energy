@@ -100,6 +100,7 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
             "{{OP_NOTE}}": "僅開啟一台",
             "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
             "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
+            "{{MOTOR_SPEC}}": f"{int(motor_hp)}HPx3台",
             "{{SAVE_RATE}}": f"{results['save_rate']:.2f}",
             "{{SAVE_MONEY}}": f"{results['save_money']:.2f}",
             "{{INVEST}}": f"{invest_amt:.1f}",
