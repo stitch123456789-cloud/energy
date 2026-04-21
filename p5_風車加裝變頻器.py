@@ -133,41 +133,54 @@ def generate_word(res):
                             fix_run_format(cell.paragraphs[0].runs[0], size=10)
 
     # B. 動態表格插入 (取代 [[OLD_TABLE_PLACEHOLDER]])
-    for p in doc.paragraphs:
-        if "[[OLD_TABLE_PLACEHOLDER]]" in p.text:
-            p.text = "" # 刪除標籤文字
-            
-            # 建立表格
-            table = doc.add_table(rows=1, cols=6)
-            table.style = 'Table Grid'
-            
-            # 填寫標頭
-            hdr = ["季節", "馬力(hp)", "台數", "時數(hr)", "負載(%)", "耗電(kWh)"]
-            for i, h in enumerate(hdr):
-                cell = table.cell(0, i)
-                cell.text = h
-                fix_run_format(cell.paragraphs[0].runs[0], size=10, is_bold=True)
-            
-            # 填寫計算後的每一行數據
-            for d in res['details']:
-                row_cells = table.add_row().cells
-                row_cells[0].text = d['季節']
-                row_cells[1].text = "15.0"
-                row_cells[2].text = "1.0"
-                row_cells[3].text = f"{d['時數']:,.0f}"
-                row_cells[4].text = d['負載']
-                row_cells[5].text = f"{d['改善前kwh']:,.0f}"
-                for c in row_cells:
-                    if c.paragraphs: fix_run_format(c.paragraphs[0].runs[0], size=10)
+# --- 在 generate_word 函數中，找到處理表格的區塊並替換 ---
 
-            # 合計行
-            total_row = table.add_row().cells
-            total_row[0].text = "合計"
-            total_row[5].text = f"{res['old_kwh']:,.0f}"
-            fix_run_format(total_row[0].paragraphs[0].runs[0], size=10, is_bold=True)
-            fix_run_format(total_row[5].paragraphs[0].runs[0], size=10, is_bold=True)
+# 強化搜尋與替換表格標籤
+for p in doc.paragraphs:
+    # 這裡使用 strip() 確保不會因為前後有空格而找不到標籤
+    if "[[OLD_TABLE_PLACEHOLDER]]" in p.text:
+        # 1. 徹底清除該段落文字，準備插入表格
+        p.text = "" 
+        
+        # 2. 在該段落位置下方建立表格 (6 欄)
+        # 注意：我們直接在 p 所在的區塊操作
+        table = doc.add_table(rows=1, cols=6)
+        table.style = 'Table Grid'
+        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # 3. 填寫標頭
+        hdr = ["季節", "馬力(hp)", "台數", "時數(hr)", "負載(%)", "耗電(kWh)"]
+        hdr_cells = table.rows[0].cells
+        for i, h in enumerate(hdr):
+            hdr_cells[i].text = h
+            # 設定標頭為粗體標楷體
+            if hdr_cells[i].paragraphs[0].runs:
+                fix_run_format(hdr_cells[i].paragraphs[0].runs[0], size=10, is_bold=True)
+        
+        # 4. 填寫每一季的數據 (來源於 res['details'])
+        for d in res['details']:
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(d['季節'])
+            row_cells[1].text = "15"
+            row_cells[2].text = "1"
+            row_cells[3].text = f"{d['時數']:,.0f}"
+            row_cells[4].text = str(d['負載'])
+            row_cells[5].text = f"{d['改善前kwh']:,.0f}"
+            
+            # 統一格式化該行所有格子
+            for cell in row_cells:
+                if cell.paragraphs and cell.paragraphs[0].runs:
+                    fix_run_format(cell.paragraphs[0].runs[0], size=10)
 
-    return doc
+        # 5. 加入合計行
+        total_row = table.add_row().cells
+        total_row[0].text = "合計"
+        total_row[5].text = f"{res['old_kwh']:,.0f}"
+        fix_run_format(total_row[0].paragraphs[0].runs[0], size=10, is_bold=True)
+        fix_run_format(total_row[5].paragraphs[0].runs[0], size=10, is_bold=True)
+        
+        # 成功插入後跳出迴圈，避免重複處理
+        break
 
 # --- 5. 輸出中心 ---
 st.markdown("---")
