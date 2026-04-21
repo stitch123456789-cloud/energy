@@ -92,7 +92,7 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
         
         # 根據您的截圖，精準對齊所有標籤
         data_map = {
-            "{{貴單位}}": unit_name,
+            "{{name}}": unit_name,
             "{{COUNT}}": "2",
             "{{CH_INFO}}": ch_info,
             "{{RT_INFO}}": rt_info,
@@ -105,6 +105,7 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
             "{{SAVE_MONEY}}": f"{results['save_money']:.2f}",
             "{{INVEST}}": f"{invest_amt:.1f}",
             "{{PAYBACK}}": f"{results['payback']:.1f}",
+            "{{SUPPRESS_KW}}": "13", # 對應預期效益第一段
             "{{ 13 }}": "13", # 處理可能有空格的標籤
             "{{13}}": "13"
         }
