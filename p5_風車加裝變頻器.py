@@ -9,15 +9,77 @@ import io
 
 def safe_replace(doc, data_map):
     """安全替換文字，保留段落格式"""
-    for p in doc.paragraphs:
-        for key, val in data_map.items():
-            if key in p.text:
-                for run in p.runs:
-                    if key in run.text:
-                        run.text = run.text.replace(key, str(val))
-                        run.font.name = '標楷體'
-                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                        run.font.color.rgb = RGBColor(0, 0, 0)
+    # --- 修正後的表格插入邏輯 ---
+
+for p in doc.paragraphs:
+    # 關鍵：將段落內所有 run 的文字合併，並去除空白，確保標籤完整
+    full_text = "".join(run.text for run in p.runs).strip()
+    
+    # 偵測現況表格標籤
+    if "[[OLD_TABLE]]" in full_text:
+        # 1. 徹底清空該段落的所有 run，確保舊標籤消失
+        for run in p.runs:
+            run.text = ""
+        p.text = "" 
+
+        # 2. 在此位置插入表格
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Table Grid'
+        
+        # 填寫表頭
+        hdr = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
+        for i, text in enumerate(hdr):
+            table.cell(0, i).text = text
+            fix_cell_style(table.cell(0, i), is_bold=True)
+            
+        # 填寫數據列 (來自 res['details'])
+        for d in res['details']:
+            row = table.add_row().cells
+            row[0].text = d['季節']
+            row[1].text = f"{d['時數']:,.0f}"
+            row[2].text = "100%"
+            row[3].text = f"{d['舊']:,.0f}"
+            for c in row: fix_cell_style(c)
+            
+        # 填寫合計列
+        tot = table.add_row().cells
+        tot[0].text = "合計"
+        tot[3].text = f"{res['old_total']:,.0f}"
+        for c in tot: fix_cell_style(c, is_bold=True)
+        continue # 處理完就跳過，避免重複偵測
+
+    # 偵測效益表格標籤
+    if "[[NEW_TABLE]]" in full_text:
+        # 1. 徹底清空標籤
+        for run in p.runs:
+            run.text = ""
+        p.text = ""
+
+        # 2. 插入表格
+        table = doc.add_table(rows=1, cols=5)
+        table.style = 'Table Grid'
+        
+        # 填寫表頭
+        hdr = ["季節", "時數(hr)", "負載(%)", "預期耗電", "節電量"]
+        for i, text in enumerate(hdr):
+            table.cell(0, i).text = text
+            fix_cell_style(table.cell(0, i), is_bold=True)
+            
+        # 填寫數據列
+        for d in res['details']:
+            row = table.add_row().cells
+            row[0].text = d['季節']
+            row[1].text = f"{d['時數']:,.0f}"
+            row[2].text = d['負載']
+            row[3].text = f"{d['新']:,.0f}"
+            row[4].text = f"{d['省']:,.0f}"
+            for c in row: fix_cell_style(c)
+            
+        # 填寫合計列
+        tot = table.add_row().cells
+        tot[0].text = "合計"
+        tot[4].text = f"{res['save_kwh']:,.0f}"
+        for c in tot: fix_cell_style(c, is_bold=True)
     
     for table in doc.tables:
         for row in table.rows:
