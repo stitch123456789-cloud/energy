@@ -36,7 +36,7 @@ mode = st.sidebar.radio(
      "2. 用戶基本資料",
      "3. 設備系統資料庫",
      "4. 冰水主機分析",
-     "5. 風車變頻器"  # <-- 新增這一項
+     "5. 風車加裝變頻器"  # <-- 新增這一項
     ]
 )
 
@@ -117,8 +117,8 @@ elif mode == "4. 冰水主機分析": # <--- 新增這一段
         exec(open("p4_冰水主機分析.py", encoding="utf-8").read())
     except FileNotFoundError:
         st.error("找不到 p4_冰水主機分析.py")
-elif mode == "5. 風車變頻器分析": # <--- 新增這一段
+elif mode == "5. 風車加裝變頻器": # <--- 新增這一段
     try:
-        exec(open("p5_風車變頻器.py", encoding="utf-8").read())
+        exec(open("p5_風車加裝變頻器.py", encoding="utf-8").read())
     except FileNotFoundError:
-        st.error("找不到 p5_風車變頻器.py")
+        st.error("找不到 p5_風車加裝變頻器.py")
