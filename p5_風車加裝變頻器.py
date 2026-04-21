@@ -6,15 +6,15 @@ from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
-# --- 1. 格式修正工具 ---
+# --- 1. 格式修正工具 (確保字體變回黑色標楷體) ---
 def fix_run_format(run, size=12, is_bold=False):
     run.font.name = '標楷體'
     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
     run.font.size = Pt(size)
     run.font.bold = is_bold
-    run.font.color.rgb = RGBColor(0, 0, 0)
+    run.font.color.rgb = RGBColor(0, 0, 0) # 強制變回黑色
 
-# --- 2. 介面與參數 ---
+# --- 2. 介面設定 ---
 st.title("🌀 P5. 冷卻水塔風車加裝變頻器")
 
 c1, c2, c3 = st.columns(3)
@@ -27,7 +27,7 @@ with c2:
 with c3:
     invest_amt = st.number_input("投資金額 (萬元)", value=58.5)
 
-st.subheader("📊 運轉時數與負載設定")
+st.subheader("📊 運轉參數設定")
 if "p5_op_data" not in st.session_state:
     st.session_state.p5_op_data = pd.DataFrame({
         "季節": ["春秋季", "夏季", "冬季"],
@@ -38,7 +38,7 @@ current_op_df = st.data_editor(st.session_state.p5_op_data, use_container_width=
 
 # --- 3. 計算邏輯 ---
 def run_calculation(df):
-    base_kw = motor_hp * 0.746 # 馬力轉 kW
+    base_kw = motor_hp * 0.746 # 15HP 約 11.2kW
     total_old = 0
     total_new = 0
     details = []
@@ -71,7 +71,7 @@ def run_calculation(df):
         "details": details
     }
 
-# --- 4. Word 生成 ---
+# --- 4. Word 生成 (精準對齊你的新標籤) ---
 def build_report(res):
     try:
         doc = Document("template_p5.docx")
@@ -79,7 +79,7 @@ def build_report(res):
         st.error("找不到 template_p5.docx")
         return None
 
-    # 文字標籤替換字典
+    # 此處字典的 Key 必須跟 Word 裡的紅色文字完全一樣
     d_map = {
         "{{貴單位}}": unit_name,
         "{{OLD_KWH}}": f"{res['old_total']:,.0f}",
@@ -90,9 +90,9 @@ def build_report(res):
         "{{PAYBACK}}": f"{res['payback']:.1f}"
     }
 
-    # 處理所有段落
+    # 1. 處理段落文字替換
     for p in doc.paragraphs:
-        # A. 替換 {{}} 標籤
+        # 替換文字標籤
         for k, v in d_map.items():
             if k in p.text:
                 for run in p.runs:
@@ -100,32 +100,51 @@ def build_report(res):
                         run.text = run.text.replace(k, str(v))
                         fix_run_format(run)
         
-        # B. 插入表格 [[OLD_TABLE]]
+        # 插入現況表格 [[OLD_TABLE]]
         if "[[OLD_TABLE]]" in p.text:
-            p.text = ""
-            table = doc.add_table(rows=1, cols=4); table.style = 'Table Grid'
+            p.text = "" # 刪除標籤文字
+            table = doc.add_table(rows=1, cols=4)
+            table.style = 'Table Grid'
             hdr = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
-            for i, h in enumerate(hdr): table.cell(0,i).text = h
+            for i, h in enumerate(hdr):
+                table.cell(0, i).text = h
+                fix_run_format(table.cell(0, i).paragraphs[0].runs[0], is_bold=True)
             for d in res['details']:
                 row = table.add_row().cells
                 row[0].text = d['季節']; row[1].text = f"{d['時數']:,.0f}"; row[2].text = "100%"; row[3].text = f"{d['舊耗電']:,.0f}"
+                for cell in row: fix_run_format(cell.paragraphs[0].runs[0], size=10)
             tot = table.add_row().cells; tot[0].text = "合計"; tot[3].text = f"{res['old_total']:,.0f}"
+            fix_run_format(tot[0].paragraphs[0].runs[0], is_bold=True); fix_run_format(tot[3].paragraphs[0].runs[0], is_bold=True)
 
-        # C. 插入表格 [[NEW_TABLE]]
+        # 插入效益表格 [[NEW_TABLE]]
         if "[[NEW_TABLE]]" in p.text:
-            p.text = ""
-            table = doc.add_table(rows=1, cols=5); table.style = 'Table Grid'
-            hdr = ["季節", "時數(hr)", "負載(%)", "預期耗電(kWh)", "節電量(kWh)"]
-            for i, h in enumerate(hdr): table.cell(0,i).text = h
+            p.text = "" # 刪除標籤文字
+            table = doc.add_table(rows=1, cols=5)
+            table.style = 'Table Grid'
+            hdr = ["季節", "時數(hr)", "負載(%)", "預期耗電", "節電量(kWh)"]
+            for i, h in enumerate(hdr):
+                table.cell(0, i).text = h
+                fix_run_format(table.cell(0, i).paragraphs[0].runs[0], is_bold=True)
             for d in res['details']:
                 row = table.add_row().cells
                 row[0].text = d['季節']; row[1].text = f"{d['時數']:,.0f}"; row[2].text = d['負載']
                 row[3].text = f"{d['新耗電']:,.0f}"; row[4].text = f"{d['節電']:,.0f}"
+                for cell in row: fix_run_format(cell.paragraphs[0].runs[0], size=10)
             tot = table.add_row().cells; tot[0].text = "合計"; tot[4].text = f"{res['save_kwh']:,.0f}"
+            fix_run_format(tot[0].paragraphs[0].runs[0], is_bold=True); fix_run_format(tot[4].paragraphs[0].runs[0], is_bold=True)
+
+    # 2. 處理表格內的文字替換 (例如回收年限格子裡的 {{}})
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for k, v in d_map.items():
+                    if k in cell.text:
+                        cell.text = cell.text.replace(k, str(v))
+                        if cell.paragraphs: fix_run_format(cell.paragraphs[0].runs[0], size=10)
 
     return doc
 
-# --- 5. 執行按鈕 ---
+# --- 5. 輸出按鈕 ---
 st.markdown("---")
 if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
     results = run_calculation(current_op_df)
@@ -133,5 +152,5 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
     if final_doc:
         buf = io.BytesIO(); final_doc.save(buf)
         st.session_state['report_warehouse']["5. 風車加裝變頻器"] = buf.getvalue()
-        st.success("✅ 報告生成成功！請下載檢查。")
-        st.download_button("📥 下載 Word", buf.getvalue(), "風車效益分析.docx")
+        st.success("✅ 報告生成成功！標籤已替換且表格已分開插入。")
+        st.download_button("📥 下載 Word 報告", buf.getvalue(), "風車效益分析.docx")
