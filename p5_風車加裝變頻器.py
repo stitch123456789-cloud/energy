@@ -92,11 +92,11 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
         
         # 根據您的截圖，精準對齊所有標籤
         data_map = {
-            "{{name}}": unit_name,
+            "{{UN}}": unit_name,
             "{{COUNT}}": "2",
             "{{CH_INFO}}": ch_info,
             "{{RT_INFO}}": rt_info,
-            "{{MOTOR_INFO}}": f"三台 {int(motor_hp)}hp",
+            "{{MT}}": f"三台 {int(motor_hp)}hp",
             "{{OP_NOTE}}": "僅開啟一台",
             "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
             "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
