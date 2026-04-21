@@ -140,46 +140,65 @@ if st.button("🚀 生成 P5 變頻器報告 (完整整合版)", use_container_w
             if "[[OLD_TABLE]]" in p.text: p.text = ""
             if "[[NEW_TABLE]]" in p.text: p.text = ""
 
-        # C. 文末生成表格
+        # 3. 在文末生成【橫向】表格 (完全對齊您截圖的格式)
         doc.add_page_break()
-        doc.add_paragraph("--- 以下為自動生成的表格 (請剪下貼上至指定位置) ---")
+        doc.add_paragraph("--- 自動生成的橫向表格 (請剪下並貼至指定位置) ---")
 
-        # 生成表一
-        doc.add_paragraph("【表一、現況耗電明細表】")
-        t1 = doc.add_table(rows=1, cols=4)
-        set_table_border(t1)
-        hdr1 = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
-        for i, text in enumerate(hdr1):
-            t1.cell(0, i).text = text
-            fix_cell_font(t1.cell(0, i), is_bold=True)
-        for d in results['details']:
-            row = t1.add_row().cells
-            row[0].text, row[1].text, row[2].text, row[3].text = d['季節'], f"{d['時數']:,.0f}", "100%", f"{d['舊']:,.0f}"
-            for c in row: fix_cell_font(c)
-        tot1 = t1.add_row().cells
-        tot1[0].text, tot1[3].text = "合計", f"{results['old_total']:,.0f}"
-        for c in tot1: fix_cell_font(c, is_bold=True)
-
-        # 生成表二
-        doc.add_paragraph("\n【表二、預期節能效益表】")
-        t2 = doc.add_table(rows=1, cols=5)
-        set_table_border(t2)
-        hdr2 = ["季節", "時數(hr)", "負載(%)", "預期耗電", "節電量"]
-        for i, text in enumerate(hdr2):
-            t2.cell(0, i).text = text
-            fix_cell_font(t2.cell(0, i), is_bold=True)
-        for d in results['details']:
-            row = t2.add_row().cells
-            row[0].text, row[1].text, row[2].text, row[3].text, row[4].text = d['季節'], f"{d['時數']:,.0f}", d['負載'], f"{d['新']:,.0f}", f"{d['省']:,.0f}"
-            for c in row: fix_cell_font(c)
-        tot2 = t2.add_row().cells
-        tot2[0].text, tot2[4].text = "合計", f"{results['save_kwh']:,.0f}"
-        for c in tot2: fix_cell_font(c, is_bold=True)
-
-        buf = io.BytesIO()
-        doc.save(buf)
-        st.success("✅ 整合完畢！文字紅字格式已保留，表格位於最後一頁。")
-        st.download_button("📥 下載完整報告", buf.getvalue(), "風車效益整合報告.docx")
+        # 準備資料：馬力轉換為 kW
+        base_kw = motor_hp * 0.746
         
-    except Exception as e:
-        st.error(f"執行錯誤: {e}")
+        # 欄數：1(標題欄) + 資料筆數 (春秋/夏/冬) + 1(合計欄)
+        num_cols = len(results['details']) + 2
+        
+        # 建立一個 7 橫列的表格
+        table = doc.add_table(rows=7, cols=num_cols)
+        set_table_border(table)
+
+        # 填寫第一列：編號 (合併中間儲存格)
+        fix_cell_font(table.cell(0, 0).text = "編號", is_bold=True)
+        # 合併中間格子並填入 CT-1
+        merged_header = table.cell(0, 1)
+        for i in range(2, num_cols - 1):
+            merged_header.merge(table.cell(0, i))
+        merged_header.text = ch_info # 使用您輸入的主機編號
+        fix_cell_font(merged_header, is_bold=True)
+        # 最後一格填合計
+        table.cell(0, num_cols-1).text = "合計"
+        fix_cell_font(table.cell(0, num_cols-1), is_bold=True)
+
+        # 定義左側標題 labels
+        labels = [
+            "水塔散熱噸數(RT)", 
+            "額定馬力(hp)", 
+            "實際耗功(kW)", 
+            "全年使用時數(hr)", 
+            "負載率(%)", 
+            "全年耗電(kWh)"
+        ]
+
+        # 逐列填寫資料 (從 Row 1 到 Row 6)
+        for r_idx, label in enumerate(labels, start=1):
+            # 填寫左邊標題
+            table.cell(r_idx, 0).text = label
+            fix_cell_font(table.cell(r_idx, 0), is_bold=True)
+            
+            row_total = 0
+            # 填寫中間各季節資料
+            for c_idx, d in enumerate(results['details'], start=1):
+                cell = table.cell(r_idx, c_idx)
+                if r_idx == 1: cell.text = str(rt_info)
+                elif r_idx == 2: cell.text = f"{motor_hp:.1f}"
+                elif r_idx == 3: cell.text = f"{base_kw:.1f}"
+                elif r_idx == 4: cell.text = f"{d['時數']:,.0f}"
+                elif r_idx == 5: cell.text = "100%"
+                elif r_idx == 6: 
+                    cell.text = f"{d['舊']:,.0f}"
+                    row_total += d['舊']
+                fix_cell_font(cell, is_bold=(r_idx==6)) # 最後一列加粗
+            
+            # 填寫右邊合計
+            last_cell = table.cell(r_idx, num_cols-1)
+            if r_idx == 3: last_cell.text = f"{base_kw * len(results['details']):.1f}"
+            elif r_idx == 6: last_cell.text = f"{results['old_total']:,.0f}"
+            else: last_cell.text = "" # 其他格留空
+            fix_cell_font(last_cell, is_bold=True)
