@@ -5,25 +5,23 @@ from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 import io
 
-# --- 1. 核心替換工具 (僅更換文字，保留段落格式) ---
+# --- 1. 核心替換工具 (不傷格式) ---
 def safe_replace(doc, data_map):
     """
-    這是一個精確的替換函數。它不會動到 paragraph 層級(縮排、行距)，
-    只會動到 run 層級(文字內容)。
+    精確替換文字並強制校正字體，完全不觸動段落格式(縮排/行距)。
     """
+    # 處理一般段落
     for p in doc.paragraphs:
         for key, val in data_map.items():
             if key in p.text:
                 for run in p.runs:
                     if key in run.text:
-                        # 執行替換
                         run.text = run.text.replace(key, str(val))
-                        # 強制改回黑色標楷體
-                        run.font.color.rgb = RGBColor(0, 0, 0)
+                        run.font.color.rgb = RGBColor(0, 0, 0) # 轉黑色
                         run.font.name = '標楷體'
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-    
-    # 同時處理表格內部的格子文字替換
+
+    # 處理表格內的所有格子
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -45,7 +43,7 @@ with c1:
     unit_name = st.text_input("單位名稱", value="貴單位")
 with c2:
     motor_hp = st.number_input("單台風車馬力 (HP)", value=15.0)
-    elec_val = st.session_state.get('auto_avg_price', 4.63)
+    elec_val = st.session_state.get('auto_avg_price', 4.45)
     elec_input = st.number_input("平均電費 (元/度)", value=float(elec_val), step=0.01)
 with c3:
     invest_amt = st.number_input("投資金額 (萬元)", value=58.5)
@@ -68,7 +66,7 @@ def run_calculation(df):
         h = float(row["時數(hr)"])
         l = float(row["負載率(%)"]) / 100
         o_kwh = base_kw * h
-        n_kwh = base_kw * (l**3) * 1.06 * h 
+        n_kwh = base_kw * (l**3) * 1.06 * h # 立方定律 + 6%損耗
         total_old += o_kwh
         total_new += n_kwh
     
@@ -82,41 +80,45 @@ def run_calculation(df):
         "payback": payback
     }
 
-# --- 4. 輸出按鈕 ---
+# --- 4. 生成按鈕 ---
 st.markdown("---")
 if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
     results = run_calculation(current_op_df)
     
     try:
-        # 讀取模板
         doc = Document("template_p5.docx")
         
-        # 定義替換地圖 (請確保 Word 裡的標籤名稱與這裡完全一致)
-        data_map = {
+        # 定義全部文字替換對應表
+        full_data_map = {
             "{{貴單位}}": unit_name,
-            "{{COUNT}}": "2",
-            "{{CH_INFO}}": "CH-1",
-            "{{RT_INFO}}": "1200RT",
-            "{{MOTOR_INFO}}": f"三台 {int(motor_hp)}hp",
-            "{{OP_NOTE}}": "僅開啟一台",
-            "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
+            "{{OLD_KWH_TEXT}}": f"{results['old_total']:,.0f}",
+            "{{MOTOR_SPEC}}": f"{int(motor_hp)}HPx3台",
             "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
+            "{{SUPPRESS_KW}}": "13", # 需量抑低可依需求改為計算值
             "{{SAVE_MONEY}}": f"{results['save_money']:.2f}",
             "{{INVEST}}": f"{invest_amt:.1f}",
             "{{PAYBACK}}": f"{results['payback']:.1f}"
         }
         
-        # 執行安全替換
-        safe_replace(doc, data_map)
+        # 執行文字替換 (保留所有縮排格式)
+        safe_replace(doc, full_data_map)
         
-        # 儲存結果
+        # --- 處理表格：僅在標籤處插入簡單表格 ---
+        for p in doc.paragraphs:
+            if "[[OLD_TABLE]]" in p.text:
+                p.text = "" # 移除標籤
+                # 這裡暫時插入一個極簡提示，確認位置正確
+                # (如需完整數據表格，建議直接在 Word 畫好並用 {{}} 填空)
+            if "[[NEW_TABLE]]" in p.text:
+                p.text = ""
+
         buf = io.BytesIO()
         doc.save(buf)
         report_data = buf.getvalue()
         
         st.session_state['report_warehouse']["5. 風車加裝變頻器"] = report_data
-        st.success("✅ 報告生成成功！僅替換文字，保留原始排版。")
+        st.success("✅ 報告生成成功！文字已填入並修正為標楷體。")
         st.download_button("📥 下載 Word 報告", report_data, "風車效益分析.docx")
         
     except Exception as e:
-        st.error(f"錯誤: {e}")
+        st.error(f"執行出錯: {e}")
