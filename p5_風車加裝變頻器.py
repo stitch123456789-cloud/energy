@@ -24,16 +24,13 @@ def set_table_border(table):
         ptr.append(borders)
 
 def fix_cell_font(cell, size=10, is_bold=False):
-    """表格內容強制格式化為標楷體"""
     for paragraph in cell.paragraphs:
-        if not paragraph.runs:
-            paragraph.add_run()
+        if not paragraph.runs: paragraph.add_run()
         for run in paragraph.runs:
             run.font.name = '標楷體'
             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
             run.font.size = Pt(size)
             run.font.bold = is_bold
-            run.font.color.rgb = RGBColor(0, 0, 0)
 
 def safe_replace_keep_style(doc, data_map):
     """強化版替換邏輯：保留紅色、粗體等原始格式"""
@@ -166,39 +163,24 @@ if st.button("🚀 生成 P5 變頻器報告 (完整整合版)", use_container_w
         table.cell(0, num_cols-1).text = "合計"
         fix_cell_font(table.cell(0, num_cols-1), is_bold=True)
 
-        # 定義左側標題 labels
-        labels = [
-            "水塔散熱噸數(RT)", 
-            "額定馬力(hp)", 
-            "實際耗功(kW)", 
-            "全年使用時數(hr)", 
-            "負載率(%)", 
-            "全年耗電(kWh)"
-        ]
+        # 填寫左側標題 (這是一列一列填)
+labels = ["編號", "水塔散熱噸數(RT)", "額定馬力(hp)", "實際耗功(kW)", "全年使用時數(hr)", "負載率(%)", "全年耗電(kWh)"]
+for r_idx, label in enumerate(labels):
+    # 第一欄填標題
+    cell_label = table.cell(r_idx, 0)
+    cell_label.text = label
+    fix_cell_font(cell_label, is_bold=True)
 
-        # 逐列填寫資料 (從 Row 1 到 Row 6)
-        for r_idx, label in enumerate(labels, start=1):
-            # 填寫左邊標題
-            table.cell(r_idx, 0).text = label
-            fix_cell_font(table.cell(r_idx, 0), is_bold=True)
-            
-            row_total = 0
-            # 填寫中間各季節資料
-            for c_idx, d in enumerate(results['details'], start=1):
-                cell = table.cell(r_idx, c_idx)
-                if r_idx == 1: cell.text = str(rt_info)
-                elif r_idx == 2: cell.text = f"{motor_hp:.1f}"
-                elif r_idx == 3: cell.text = f"{base_kw:.1f}"
-                elif r_idx == 4: cell.text = f"{d['時數']:,.0f}"
-                elif r_idx == 5: cell.text = "100%"
-                elif r_idx == 6: 
-                    cell.text = f"{d['舊']:,.0f}"
-                    row_total += d['舊']
-                fix_cell_font(cell, is_bold=(r_idx==6)) # 最後一列加粗
-            
-            # 填寫右邊合計
-            last_cell = table.cell(r_idx, num_cols-1)
-            if r_idx == 3: last_cell.text = f"{base_kw * len(results['details']):.1f}"
-            elif r_idx == 6: last_cell.text = f"{results['old_total']:,.0f}"
-            else: last_cell.text = "" # 其他格留空
-            fix_cell_font(last_cell, is_bold=True)
+    # 填寫中間的資料欄位
+    for c_idx, d in enumerate(results['details'], start=1):
+        cell_data = table.cell(r_idx, c_idx)
+        # 根據 r_idx 決定填什麼數字 (例如 r_idx=4 填時數)
+        if r_idx == 4: cell_data.text = f"{d['時數']:,.0f}"
+        # ... 其他邏輯
+        fix_cell_font(cell_data)
+
+    # 填寫最後一欄 (合計)
+    cell_total = table.cell(r_idx, num_cols-1)
+    if r_idx == 0: cell_total.text = "合計"
+    # ... 其他邏輯
+    fix_cell_style(cell_total, is_bold=True)
