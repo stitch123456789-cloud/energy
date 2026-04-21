@@ -5,102 +5,100 @@ from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 import io
 
-# --- 1. 核心工具函數 (確保字體為標楷體) ---
-def fix_font(run, size=10, is_bold=False):
+# --- 1. 極簡格式工具 ---
+def apply_font(run, size=11):
     run.font.name = '標楷體'
     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
     run.font.size = Pt(size)
-    run.font.bold = is_bold
     run.font.color.rgb = RGBColor(0, 0, 0)
 
-def safe_replace(doc, data_map):
-    """安全替換 {{標籤}}"""
-    for p in doc.paragraphs:
-        for key, val in data_map.items():
-            if key in p.text:
-                p.text = p.text.replace(key, str(val))
-                for run in p.runs:
-                    fix_font(run)
+# --- 2. 介面設定 ---
+st.title("🌀 P5. 冷卻水塔風車變頻分析")
 
-# --- 2. 介面與計算 ---
-st.title("🌀 P5. 冷卻水塔風車變頻效益分析")
+col1, col2, col3 = st.columns(3)
+with col1:
+    unit_name = st.text_input("單位名稱", value="貴單位", key="p5_unit")
+with col2:
+    motor_hp = st.number_input("單台馬力 (HP)", value=50.0, key="p5_hp")
+    elec_price = st.number_input("平均電費 (元/度)", value=3.5, key="p5_elec")
+with col3:
+    invest_amt = st.number_input("投資金額 (萬元)", value=80.0, key="p5_invest")
+    setup_note = st.text_input("運轉說明", value="僅開啟 2 台", key="p5_note")
 
-c1, c2, c3 = st.columns(3)
-with c1:
-    unit_name = st.text_input("單位名稱", value="貴單位")
-    motor_hp = st.number_input("單台馬力 (HP)", value=15.0)
-with c2:
-    motor_count = st.number_input("風車台數", value=3, step=1)
-    elec_input = st.number_input("平均電費 (元/度)", value=4.45)
-with c3:
-    invest_amt = st.number_input("投資金額 (萬元)", value=58.5)
-    setup_note = st.text_input("運轉說明", value="僅開啟兩台")
-
-st.subheader("📊 運轉參數設定")
-if "p5_op_data" not in st.session_state:
-    st.session_state.p5_op_data = pd.DataFrame({
+# 參數設定表格
+if "p5_data" not in st.session_state:
+    st.session_state.p5_data = pd.DataFrame({
         "季節": ["春秋季", "夏季", "冬季"],
         "時數(hr)": [4380, 2190, 2190],
         "負載率(%)": [70, 85, 60]
     })
-current_op_df = st.data_editor(st.session_state.p5_op_data, num_rows="dynamic", use_container_width=True)
+current_df = st.data_editor(st.session_state.p5_data, use_container_width=True, key="p5_editor")
 
-# --- 3. 生成按鈕 ---
-if st.button("🚀 生成報告 (表格生成於文末)"):
+# --- 3. 生成邏輯 ---
+if st.button("🚀 生成報告 (避開所有樣式錯誤)", use_container_width=True):
     try:
-        # A. 計算
+        # 計算
         base_kw = motor_hp * 0.746
-        details = []
         total_old, total_new = 0, 0
-        for _, row in current_op_df.iterrows():
-            h, l = float(row["時數(hr)"]), float(row["負載率(%)"]) / 100
-            o_kwh = base_kw * h
-            n_kwh = base_kw * (l**3) * 1.06 * h
-            details.append({"季節": row["季節"], "時數": h, "負載": f"{row['負載率(%)']}%", "舊": o_kwh, "新": n_kwh, "省": o_kwh - n_kwh})
-            total_old += o_kwh
-            total_new += n_kwh
-
-        # B. 開啟範本與替換文字
-        doc = Document("template_p5.docx")
-        data_map = {
-            "{{UN}}": unit_name, "{{MT}}": f"{int(motor_count)}台 {int(motor_hp)}hp",
-            "{{OLD_KWH}}": f"{total_old:,.0f}", "{{SAVE_KWH}}": f"{(total_old-total_new):,.0f}",
-            "{{SAVE_MONEY}}": f"{((total_old-total_new)*elec_input/10000):.2f}",
-            "{{PAYBACK}}": f"{(invest_amt/((total_old-total_new)*elec_input/10000)):.1f}"
-        }
-        safe_replace(doc, data_map)
-
-        # C. 在文件最後一頁生成表格 (100% 成功，不跑版)
-        doc.add_page_break()
-        doc.add_paragraph("--- 以下為自動生成的表格，請剪下後貼至報告指定位置 ---")
-
-        # 表格 1：現況耗電
-        doc.add_paragraph("【表一、現況運轉耗電明細表】")
-        t1 = doc.add_table(rows=1, cols=4)
-        t1.style = 'Table Grid'
-        cols1 = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
-        for i, name in enumerate(cols1):
-            t1.cell(0, i).text = name
-        for d in details:
-            row = t1.add_row().cells
-            row[0].text, row[1].text, row[2].text, row[3].text = d['季節'], f"{d['時數']:,.0f}", "100%", f"{d['舊']:,.0f}"
+        rows_data = []
+        for _, r in current_df.iterrows():
+            h, l = float(r["時數(hr)"]), float(r["負載率(%)"])/100
+            o, n = base_kw * h, base_kw * (l**3) * 1.06 * h
+            rows_data.append([r["季節"], f"{h:,.0f}", f"{r['負載率(%)']}%", f"{o:,.0f}", f"{n:,.0f}", f"{o-n:,.0f}"])
+            total_old += o
+            total_new += n
         
-        # 表格 2：節能效益
-        doc.add_paragraph("\n【表二、預期節能效益表】")
-        t2 = doc.add_table(rows=1, cols=5)
-        t2.style = 'Table Grid'
-        cols2 = ["季節", "時數(hr)", "負載(%)", "預期耗電", "節電量"]
-        for i, name in enumerate(cols2):
-            t2.cell(0, i).text = name
-        for d in details:
-            row = t2.add_row().cells
-            row[0].text, row[1].text, row[2].text, row[3].text, row[4].text = d['季節'], f"{d['時數']:,.0f}", d['負載'], f"{d['新']:,.0f}", f"{d['省']:,.0f}"
+        save_kwh = total_old - total_new
+        save_money = save_kwh * elec_price / 10000
+        payback = invest_amt / save_money if save_money > 0 else 0
 
-        # D. 匯出
+        # 開啟文件
+        doc = Document("template_p5.docx")
+        
+        # 文字替換 (直接操作段落)
+        data_map = {
+            "{{UN}}": unit_name,
+            "{{OLD_KWH}}": f"{total_old:,.0f}",
+            "{{SAVE_KWH}}": f"{save_kwh:,.0f}",
+            "{{SAVE_MONEY}}": f"{save_money:.2f}",
+            "{{PAYBACK}}": f"{payback:.1f}"
+        }
+        for p in doc.paragraphs:
+            for k, v in data_map.items():
+                if k in p.text:
+                    p.text = p.text.replace(k, v)
+                    for run in p.runs: apply_font(run)
+
+        # 在文末生成表格 (不使用 'Table Grid' 樣式，避免報錯)
+        doc.add_page_break()
+        doc.add_paragraph("--- 自動生成效益表 (請剪下貼上) ---")
+        
+        # 建立表格
+        table = doc.add_table(rows=1, cols=6)
+        # 手動開啟框線 (這是最保險的做法)
+        table.style = None 
+        
+        # 標題
+        hdr = ["季節", "時數", "負載", "現況耗電", "預期耗電", "節電量"]
+        for i, name in enumerate(hdr):
+            cell = table.cell(0, i)
+            cell.text = name
+            for p in cell.paragraphs:
+                for run in p.runs: apply_font(run, is_bold=True)
+        
+        # 數據
+        for row_vals in rows_data:
+            cells = table.add_row().cells
+            for i, val in enumerate(row_vals):
+                cells[i].text = val
+                for p in cells[i].paragraphs:
+                    for run in p.runs: apply_font(run)
+        
+        # 下載
         buf = io.BytesIO()
         doc.save(buf)
-        st.success("✅ 報告已生成！表格位於最後一頁。")
-        st.download_button("📥 下載 Word 報告", buf.getvalue(), "風車效益報告.docx")
+        st.success("✅ 報告生成成功！")
+        st.download_button("📥 下載 Word 報告", buf.getvalue(), "風車分析報告.docx")
 
     except Exception as e:
-        st.error(f"❌ 錯誤: {e}")
+        st.error(f"❌ 執行出錯: {str(e)}")
