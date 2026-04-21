@@ -47,7 +47,7 @@ with c2:
 with c3:
     rt_info = st.text_input("冷卻水塔容量", value="1200RT")
     invest_amt = st.number_input("投資金額 (萬元)", value=58.5)
-
+    setup_note = st.text_input("運轉說明", value="僅開啟一台")
 st.subheader("📊 運轉參數設定")
 if "p5_op_data" not in st.session_state:
     st.session_state.p5_op_data = pd.DataFrame({
