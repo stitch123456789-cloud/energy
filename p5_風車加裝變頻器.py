@@ -6,9 +6,8 @@ from docx.oxml.ns import qn
 import io
 
 # --- 1. 核心工具函數 ---
-
 def safe_replace(doc, data_map):
-    """安全替換文字，保留段落格式"""
+    """替換文字標籤，確保標楷體"""
     for p in doc.paragraphs:
         for key, val in data_map.items():
             if key in p.text:
@@ -18,23 +17,9 @@ def safe_replace(doc, data_map):
                         run.font.name = '標楷體'
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                         run.font.color.rgb = RGBColor(0, 0, 0)
-    
-    # 處理表格內的標籤
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    for key, val in data_map.items():
-                        if key in p.text:
-                            for run in p.runs:
-                                if key in run.text:
-                                    run.text = run.text.replace(key, str(val))
-                                    run.font.name = '標楷體'
-                                    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                                    run.font.color.rgb = RGBColor(0, 0, 0)
 
 def fix_cell_style(cell, size=10, is_bold=False):
-    """表格內容格式化：確保標楷體、字體大小與顏色"""
+    """校正表格格子的字體格式"""
     for paragraph in cell.paragraphs:
         if not paragraph.runs:
             paragraph.add_run()
@@ -46,7 +31,6 @@ def fix_cell_style(cell, size=10, is_bold=False):
             run.font.color.rgb = RGBColor(0, 0, 0)
 
 # --- 2. 介面設定 ---
-
 st.title("🌀 P5. 冷卻水塔風車加裝變頻器")
 
 c1, c2, c3 = st.columns(3)
@@ -72,7 +56,6 @@ if "p5_op_data" not in st.session_state:
 current_op_df = st.data_editor(st.session_state.p5_op_data, use_container_width=True)
 
 # --- 3. 計算邏輯 ---
-
 def run_calculation(df):
     base_kw = motor_hp * 0.746
     details = []
@@ -95,35 +78,31 @@ def run_calculation(df):
     return {"old_total": total_old, "save_kwh": save_kwh, "save_money": save_money, 
             "payback": payback, "save_rate": save_rate, "details": details}
 
-# --- 4. 生成按鈕與核心邏輯 ---
-
+# --- 4. 生成按鈕 ---
 st.markdown("---")
 if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
     res = run_calculation(current_op_df)
     try:
         doc = Document("template_p5.docx")
         
-        # 定義替換地圖
+        # A. 替換一般文字
         data_map = {
             "{{UN}}": unit_name, "{{CH_INFO}}": ch_info, "{{RT_INFO}}": rt_info,
             "{{MT}}": f"三台 {int(motor_hp)}hp", "{{ON}}": setup_note,
             "{{OLD_KWH}}": f"{res['old_total']:,.0f}", "{{SAVE_KWH}}": f"{res['save_kwh']:,.0f}",
             "{{SAVE_RATE}}": f"{res['save_rate']:.2f}", "{{SAVE_MONEY}}": f"{res['save_money']:.2f}",
             "{{INVEST}}": f"{invest_amt:.1f}", "{{PAYBACK}}": f"{res['payback']:.1f}",
-            "{{MOTOR_SPEC}}": f"{int(motor_hp)}HPx3台", "{{SUPPRESS_KW}}": "13", "{{COUNT}}": "2"
+            "{{COUNT}}": "2"
         }
-
-        # Step 1: 先執行文字標籤替換
         safe_replace(doc, data_map)
 
-        # Step 2: 處理表格插入 (強化偵測邏輯)
+        # B. 處理動態表格 (暴力偵測法)
         for p in doc.paragraphs:
-            # 合併 run 文字以避免標籤被 Word 分割而無法偵測
+            # 合併段落文字並移除空格，確保偵測不會被 Word 格式拆斷
             full_text = "".join(run.text for run in p.runs).strip()
             
-            # 處理現況表格
             if "[[OLD_TABLE]]" in full_text:
-                p.text = "" # 清空標籤
+                p.text = "" # 移除標籤
                 table = doc.add_table(rows=1, cols=4)
                 table.style = 'Table Grid'
                 hdr = ["季節", "時數(hr)", "負載(%)", "耗電(kWh)"]
@@ -139,9 +118,8 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
                 tot[0].text = "合計"; tot[3].text = f"{res['old_total']:,.0f}"
                 for c in tot: fix_cell_style(c, is_bold=True)
 
-            # 處理效益表格
             if "[[NEW_TABLE]]" in full_text:
-                p.text = "" # 清空標籤
+                p.text = ""
                 table = doc.add_table(rows=1, cols=5)
                 table.style = 'Table Grid'
                 hdr = ["季節", "時數(hr)", "負載(%)", "預期耗電", "節電量"]
@@ -158,10 +136,9 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
                 tot[0].text = "合計"; tot[4].text = f"{res['save_kwh']:,.0f}"
                 for c in tot: fix_cell_style(c, is_bold=True)
 
-        # Step 3: 匯出檔案
         buf = io.BytesIO()
         doc.save(buf)
-        st.success("✅ 報告已生成！文字與表格均已處理完成。")
+        st.success("✅ 報告生成成功！請點擊下方按鈕下載。")
         st.download_button("📥 下載修正版 Word 報告", buf.getvalue(), "風車效益分析.docx")
         
     except Exception as e:
