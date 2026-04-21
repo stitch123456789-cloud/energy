@@ -97,7 +97,7 @@ if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
             "{{CH_INFO}}": ch_info,
             "{{RT_INFO}}": rt_info,
             "{{MT}}": f"三台 {int(motor_hp)}hp",
-            "{{OP_NOTE}}": "僅開啟一台",
+            "{{ON}}": setup_note,           # 對應現況說明：僅開啟一台
             "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
             "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
             "{{MOTOR_SPEC}}": f"{int(motor_hp)}HPx3台",
