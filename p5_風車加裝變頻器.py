@@ -3,6 +3,7 @@ import pandas as pd
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
 # --- 1. 核心替換工具 (不傷格式) ---
@@ -32,6 +33,15 @@ def safe_replace(doc, data_map):
                                     run.font.color.rgb = RGBColor(0, 0, 0)
                                     run.font.name = '標楷體'
                                     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+# --- 1. 格式修正工具 (確保字體變回黑色標楷體) ---
+def fix_cell_format(cell, size=10, is_bold=False):
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            run.font.name = '標楷體'
+            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            run.font.size = Pt(size)
+            run.font.bold = is_bold
+            run.font.color.rgb = RGBColor(0, 0, 0)
 
 # --- 2. 介面設定 ---
 st.title("🌀 P5. 冷卻水塔風車加裝變頻器")
@@ -60,6 +70,7 @@ current_op_df = st.data_editor(st.session_state.p5_op_data, use_container_width=
 # --- 3. 計算邏輯 ---
 def run_calculation(df):
     base_kw = motor_hp * 0.746 
+    details = []
     total_old = 0
     total_new = 0
     for _, row in df.iterrows():
@@ -67,6 +78,7 @@ def run_calculation(df):
         l = float(row["負載率(%)"]) / 100
         o_kwh = base_kw * h
         n_kwh = base_kw * (l**3) * 1.06 * h 
+        details.append({"季節": row["季節"], "時數": h, "負載": f"{row['負載率(%)']}%", "舊": o, "新": n, "省": o-n})
         total_old += o_kwh
         total_new += n_kwh
     
