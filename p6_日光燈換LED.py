@@ -1,152 +1,294 @@
-import streamlit as st
+"""
+日光燈換LED節能報告產生器
+輸入：Excel能源查核表
+輸出：Word改善措施建議表(二)
+
+使用方式：
+    python generate_led_report.py <excel路徑> [輸出docx路徑]
+
+模板檔案 template_5A03.docx 需與本程式放在同一目錄。
+"""
+
+import sys, os, re, shutil, zipfile, tempfile
 import pandas as pd
-from docx import Document
-from docx.shared import Pt, RGBColor
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-import io
 
-# --- 1. 核心工具函數 ---
-def set_table_border(table):
-    tbl = table._tbl
-    ptr = tbl.find(qn('w:tblPr'))
-    if ptr is not None:
-        borders = OxmlElement('w:tblBorders')
-        for b in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
-            edge = OxmlElement(f'w:{b}')
-            edge.set(qn('w:val'), 'single')
-            edge.set(qn('w:sz'), '4') 
-            edge.set(qn('w:color'), '000000')
-            borders.append(edge)
-        ptr.append(borders)
+# ── 固定參數（此報告類型的標準值）──
+LED_SAVE_RATIO   = 0.464537   # LED換裝後節省比例（46.45%）
+ELEC_PRICE       = 4.6238     # 平均電費（元/kWh）
+INVEST_PER_KW    = 24677  # 元/kW（依模板反推）     # 投資費用（元/具）
+OLD_LAMP_TYPE    = "1.日光燈"
 
-def fix_cell_font(cell, size=10, is_bold=False):
-    for paragraph in cell.paragraphs:
-        paragraph.alignment = 1 
-        if not paragraph.runs: paragraph.add_run()
-        for run in paragraph.runs:
-            run.font.name = '標楷體'
-            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-            run.font.size = Pt(size)
-            run.font.bold = is_bold
 
-# --- 2. 數據抓取邏輯 (對接 app.py) ---
+# ══════════════════════════════════════
+# 1. 讀取 Excel
+# ══════════════════════════════════════
 
-# 初始化數據容器
-if "lighting_data" not in st.session_state:
-    st.session_state.lighting_data = []
+def read_excel(path):
+    xl = pd.ExcelFile(path)
 
-# 嘗試從 app.py 的全域 Excel 中抓取「表九之二」
-global_file = st.session_state.get('global_excel')
+    # 讀取單位名稱
+    df_info = pd.read_excel(path, sheet_name="三、能源用戶基本資料", header=None)
+    unit_name = "貴單位"
+    for _, row in df_info.iterrows():
+        vals = [str(v) for v in row if str(v) not in ("nan", "None", "")]
+        for i, v in enumerate(vals):
+            if "07." in v and "能源用戶名稱" in v:
+                if i + 1 < len(vals):
+                    unit_name = vals[i + 1].strip()
 
-if global_file is not None and not st.session_state.lighting_data:
+    # 找照明系統工作表
+    lighting_sheet = next(
+        (s for s in xl.sheet_names if "表九之二" in s), None
+    )
+    if not lighting_sheet:
+        raise ValueError("找不到「表九之二」照明系統工作表")
+
+    df = pd.read_excel(path, sheet_name=lighting_sheet, header=None)
+
+    # 欄位對照（依Excel實際欄位）：
+    #  [1]=燈具種類 [2]=廠牌 [3]=裝設區域(有些欄位合併) [4]=燈管型式
+    #  [5]=容量規格 [6]=安定器 [7]=電功率(瓦/具) [8]=製造年份
+    #  [9]=數量(具) [10]=設備耗電合計(瓩) [11]=運轉時數(小時/年)
+    lamps = []
+    for _, row in df.iterrows():
+        vals = list(row)
+        first = str(vals[1]) if len(vals) > 1 else ""
+        if not (first.startswith("1.") or first.startswith("2.")):
+            continue
+
+        def g(idx, typ=str):
+            v = vals[idx] if idx < len(vals) else ""
+            if str(v) in ("nan", "None", ""):
+                return "" if typ == str else 0
+            try:
+                return typ(v)
+            except:
+                return "" if typ == str else 0
+
+        lamps.append({
+            "type":     g(1).strip(),
+            "capacity": g(5).strip(),
+            "qty":      g(9, int),      # 數量(具)
+            "total_kw": g(10, float),   # 設備耗電合計(瓩=kW)
+            "hours":    g(11, int),     # 運轉時數(hr/年)
+        })
+
+    return unit_name, lamps
+
+
+# ══════════════════════════════════════
+# 2. 計算節能效益
+# ══════════════════════════════════════
+
+def calculate(lamps):
+    old = [l for l in lamps if l["type"] == OLD_LAMP_TYPE]
+    if not old:
+        raise ValueError("Excel中找不到日光燈（1.日光燈）資料")
+
+    total_old_kwh = sum(l["total_kw"] * l["hours"] for l in old)
+    save_kwh      = round(total_old_kwh * LED_SAVE_RATIO)
+    save_money    = round(save_kwh * ELEC_PRICE / 10000, 2)   # 萬元/年
+    energy_rate   = round(LED_SAVE_RATIO * 100, 2)             # %
+    total_qty     = sum(l["qty"] for l in old)
+    total_old_kw  = sum(l["total_kw"] for l in old)
+    invest        = round(total_old_kw * INVEST_PER_KW / 10000, 1)  # 萬元
+    payback       = round(invest / save_money, 1) if save_money > 0 else 0
+
+    total_old_kw  = sum(l["total_kw"] for l in old)
+    save_kw       = round(total_old_kw * LED_SAVE_RATIO)
+
+    return {
+        "old_lamps":      old,
+        "total_old_kwh":  round(total_old_kwh),
+        "save_kwh":       save_kwh,
+        "save_money":     save_money,
+        "energy_rate":    energy_rate,
+        "save_kw":        save_kw,
+        "invest":         invest,
+        "payback":        payback,
+    }
+
+
+# ══════════════════════════════════════
+# 3. 產生燈具資料列 XML
+# ══════════════════════════════════════
+
+def make_cell(text, width, left_border="nil", top_border="nil"):
+    return f"""              <w:tc>
+                <w:tcPr>
+                  <w:tcW w:w="{width}" w:type="dxa"/>
+                  <w:tcBorders>
+                    <w:top w:val="{top_border}"/>
+                    <w:left w:val="{left_border}" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                    <w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+                  </w:tcBorders>
+                  <w:shd w:val="clear" w:color="auto" w:fill="auto"/>
+                  <w:noWrap/>
+                  <w:vAlign w:val="center"/>
+                </w:tcPr>
+                <w:p>
+                  <w:pPr>
+                    <w:widowControl/>
+                    <w:jc w:val="center"/>
+                    <w:rPr>
+                      <w:rFonts w:ascii="標楷體" w:eastAsia="標楷體" w:hAnsi="標楷體" w:cs="新細明體"/>
+                      <w:kern w:val="0"/>
+                      <w:sz w:val="22"/>
+                    </w:rPr>
+                  </w:pPr>
+                  <w:r>
+                    <w:rPr>
+                      <w:rFonts w:ascii="標楷體" w:eastAsia="標楷體" w:hAnsi="標楷體" w:cs="新細明體" w:hint="eastAsia"/>
+                      <w:kern w:val="0"/>
+                      <w:sz w:val="22"/>
+                    </w:rPr>
+                    <w:t>{text}</w:t>
+                  </w:r>
+                </w:p>
+              </w:tc>"""
+
+
+def make_lamp_row(lamp):
+    qty   = f"{lamp['qty']:,}"   if lamp['qty']   else ""
+    hours = f"{lamp['hours']:,}" if lamp['hours']  else ""
+    return f"""            <w:tr>
+              <w:trPr>
+                <w:trHeight w:val="315"/>
+                <w:jc w:val="center"/>
+              </w:trPr>
+{make_cell(lamp["type"],     1680, left_border="single")}
+{make_cell(lamp["capacity"], 2216)}
+{make_cell(qty,              1144)}
+{make_cell(hours,            2100)}
+            </w:tr>"""
+
+
+# ══════════════════════════════════════
+# 4. 修改 document.xml
+# ══════════════════════════════════════
+
+def patch_xml(xml_path, result):
+    with open(xml_path, encoding="utf-8") as f:
+        content = f.read()
+
+    c = result
+    fmt_kwh   = f"{c['total_old_kwh']:,}"
+    fmt_save  = f"{c['save_kwh']:,}"
+
+    # ── 頂部表格數字 ──
+    content = content.replace(">298891<",  f">{c['total_old_kwh']}<")
+    content = content.replace(">138846<",  f">{c['save_kwh']}<")
+    content = content.replace(">64.20<",   f">{c['save_money']}<")
+    content = content.replace(">46.45<",   f">{c['energy_rate']}<")
+    content = content.replace(">168.3<",   f">{c['invest']}<")
+    content = content.replace(">2.6<",     f">{c['payback']}<")
+
+    # ── 現況耗電量合計（逗號格式）──
+    content = content.replace(">298,891<", f">{fmt_kwh}<")
+
+    # ── 預期效益段落 ──
+    content = re.sub(
+        r"降低尖峰用電需量約\d+kW",
+        f"降低尖峰用電需量約{c['save_kw']}kW",
+        content
+    )
+    content = re.sub(
+        r"減少用電量約[\d,]+kWh/年",
+        f"減少用電量約{fmt_save}kWh/年",
+        content
+    )
+    # 節省金額（64.2 萬元）— 出現在預期效益段落
+    content = re.sub(
+        r"節省</w:t>.*?<w:t[^>]*>64\.2</w:t>",
+        lambda m: m.group().replace(">64.2<", f">{c['save_money']}<"),
+        content, flags=re.DOTALL
+    )
+    # 投資費用段落（168.3 × 2）
+    # 回收年限段落（168.3 ÷ 64.2 = 2.6）
+    content = re.sub(
+        r"萬元÷</w:t>.*?<w:t[^>]*>64\.2</w:t>",
+        lambda m: m.group().replace(">64.2<", f">{c['save_money']}<"),
+        content, flags=re.DOTALL
+    )
+    content = re.sub(
+        r"萬元/年=</w:t>.*?<w:t[^>]*>2\.6</w:t>",
+        lambda m: m.group().replace(">2.6<", f">{c['payback']}<"),
+        content, flags=re.DOTALL
+    )
+
+    # ── 燈具資料列替換 ──
+    lamp_rows_xml = "\n".join(make_lamp_row(l) for l in c["old_lamps"])
+    tr_pattern = re.compile(
+        r'<w:tr\b[^>]*>(?:(?!</w:tr>)[\s\S])*?<w:t>日光燈</w:t>[\s\S]*?</w:tr>',
+        re.DOTALL
+    )
+    matches = list(tr_pattern.finditer(content))
+    if matches:
+        content = content[:matches[0].start()] + lamp_rows_xml + content[matches[-1].end():]
+
+    with open(xml_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+# ══════════════════════════════════════
+# 5. 打包 DOCX
+# ══════════════════════════════════════
+
+def build_docx(template_path, output_path, result):
+    tmpdir = tempfile.mkdtemp()
     try:
-        # 讀取所有 Sheet 名字
-        all_sheets = pd.ExcelFile(global_file).sheet_names
-        # 尋找包含 "九之二" 字眼的 Sheet
-        target_s = [s for s in all_sheets if "九之二" in s]
-        
-        if target_s:
-            # 讀取表九之二 (假設數據從第 4 行標題開始，請根據實況調整 skiprows)
-            df_raw = pd.read_excel(global_file, sheet_name=target_s[0], skiprows=2)
-            
-            # 能源局標準格式對接
-            mapping = {
-                '區域名稱': 'area', '現有燈具形式': 'type',
-                '現有燈具功率(W)': 'old_w', '現有數量': 'qty', '年運轉時數': 'hr'
-            }
-            df_raw = df_raw.rename(columns=mapping)
-            
-            # 過濾出必要的欄位
-            valid_cols = [c for c in mapping.values() if c in df_raw.columns]
-            df_final = df_raw[valid_cols].copy()
-            
-            # 補足 LED 預設參數
-            df_final['led_w'] = 18
-            df_final['led_price'] = 250
-            
-            st.session_state.lighting_data = df_final.to_dict('records')
-            st.toast("✅ 已成功從總表抓取照明數據 (表九之二)")
-    except Exception as e:
-        st.warning(f"自動抓取總表失敗，請改用手動編輯：{e}")
+        with zipfile.ZipFile(template_path, "r") as z:
+            z.extractall(tmpdir)
+        patch_xml(os.path.join(tmpdir, "word", "document.xml"), result)
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    fpath = os.path.join(root, file)
+                    zout.write(fpath, os.path.relpath(fpath, tmpdir))
+    finally:
+        shutil.rmtree(tmpdir)
 
-# --- 3. 介面設計 ---
-st.title("💡 P6. 照明系統節能效益分析")
 
-# 基礎參數 (平均電費自動對接 app.py 的計算結果)
-avg_p = st.session_state.get('auto_avg_price', 3.5)
+# ══════════════════════════════════════
+# 主程式
+# ══════════════════════════════════════
 
-c1, c2, c3 = st.columns(3)
-u_name = c1.text_input("單位名稱", value="貴單位")
-e_price = c2.number_input("平均電費 (元/度)", value=float(avg_p))
-w_cost = c3.number_input("平均施工費 (元/盞)", value=150)
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
 
-# 數據編輯區
-st.subheader("📝 燈具數據確認與編輯")
-if not st.session_state.lighting_data:
-    st.info("💡 目前全域資料庫無照明數據，請在下方表格直接貼上資料或手動輸入。")
-    # 給一個預設空白列
-    st.session_state.lighting_data = [{"area": "", "type": "", "old_w": 46, "qty": 0, "hr": 3000, "led_w": 18, "led_price": 250}]
+    excel_path = sys.argv[1]
+    if not os.path.exists(excel_path):
+        print(f"錯誤：找不到檔案 {excel_path}")
+        sys.exit(1)
 
-df_lighting = st.data_editor(pd.DataFrame(st.session_state.lighting_data), num_rows="dynamic", use_container_width=True)
+    output_path = sys.argv[2] if len(sys.argv) >= 3 else \
+        f"LED節能報告_{os.path.splitext(os.path.basename(excel_path))[0]}.docx"
 
-# --- 4. 報告生成與存入 warehouse ---
-if st.button("🚀 生成 P6 照明報告", use_container_width=True):
-    try:
-        doc = Document()
-        # 設定橫向
-        section = doc.sections[0]
-        section.orientation = 1
-        section.page_width, section.page_height = section.page_height, section.page_width
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_5A03.docx")
+    if not os.path.exists(template_path):
+        print(f"錯誤：找不到模板 {template_path}")
+        sys.exit(1)
 
-        doc.add_heading(f'{u_name} 照明節能效益分析', 0)
+    print(f"讀取：{excel_path}")
+    unit_name, lamps = read_excel(excel_path)
+    result = calculate(lamps)
 
-        # 表格生成
-        table = doc.add_table(rows=1, cols=10)
-        table.style = 'Table Grid'
-        set_table_border(table)
-        
-        headers = ["區域", "原形式", "數量", "時數", "原W", "新W", "原kWh", "新kWh", "節電量", "投資額"]
-        for i, h in enumerate(headers):
-            table.cell(0, i).text = h
-            fix_cell_font(table.cell(0, i), is_bold=True)
+    c = result
+    print(f"  單位：{unit_name}")
+    print(f"  日光燈資料筆數：{len(c['old_lamps'])}")
+    print(f"  現況耗電：{c['total_old_kwh']:,} kWh/年")
+    print(f"  節省耗電：{c['save_kwh']:,} kWh/年（{c['energy_rate']}%）")
+    print(f"  節省金額：{c['save_money']} 萬元/年")
+    print(f"  降低需量：{c['save_kw']} kW")
+    print(f"  投資費用：{c['invest']} 萬元")
+    print(f"  回收年限：{c['payback']} 年")
 
-        t_old_kwh, t_new_kwh, t_inv = 0, 0, 0
+    print(f"產生：{output_path}")
+    build_docx(template_path, output_path, result)
+    print("完成！")
 
-        for _, row in df_lighting.iterrows():
-            qty, hr = float(row.get('qty', 0)), float(row.get('hr', 0))
-            o_w, n_w = float(row.get('old_w', 0)), float(row.get('led_w', 0))
-            lp = float(row.get('led_price', 0))
-
-            o_kwh = (o_w * qty * hr) / 1000
-            n_kwh = (n_w * qty * hr) / 1000
-            inv = (lp + w_cost) * qty
-
-            t_old_kwh += o_kwh
-            t_new_kwh += n_kwh
-            t_inv += inv
-
-            cells = table.add_row().cells
-            cells[0].text = str(row.get('area', ''))
-            cells[1].text = str(row.get('type', ''))
-            cells[2].text = f"{qty:,.0f}"
-            cells[3].text = f"{hr:,.0f}"
-            cells[4].text = str(o_w)
-            cells[5].text = str(n_w)
-            cells[6].text = f"{o_kwh:,.0f}"
-            cells[7].text = f"{n_kwh:,.0f}"
-            cells[8].text = f"{(o_kwh - n_kwh):,.0f}"
-            cells[9].text = f"{inv:,.0f}"
-            for c in cells: fix_cell_font(c)
-
-        # 存入 warehouse (讓 app.py 的側邊欄可以打包)
-        buf = io.BytesIO()
-        doc.save(buf)
-        report_name = f"P6_照明分析_{u_name}"
-        st.session_state['report_warehouse'][report_name] = buf.getvalue()
-        
-        st.success(f"🎉 報告已生成並存入輸出中心！(目前共 {len(st.session_state['report_warehouse'])} 份)")
-        st.download_button("📥 直接下載此份報告", buf.getvalue(), f"{report_name}.docx")
-
-    except Exception as e:
-        st.error(f"生成失敗：{e}")
+if __name__ == "__main__":
+    main()
