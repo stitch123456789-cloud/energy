@@ -120,7 +120,7 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
 
         doc = Document("template_p5.docx")
         
-        # 3. 強效文字標籤地圖 (對齊您截圖的所有紅色標籤)
+        # 3. 文字標籤地圖 (對齊截圖紅色標籤)
         data_map = {
             "{{UN}}": unit_name, "{{COUNT}}": str(len(st.session_state.towers)),
             "{{CH_INFO}}": ch_info, "{{RT_INFO}}": rt_info,
@@ -131,7 +131,7 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
             "{{SUPPRESS_KW}}": f"{(total_kw * 0.15):,.1f}"
         }
         
-        # 執行強效替換 (解決標籤碎裂問題)
+        # 執行替換
         safe_replace(doc, data_map)
 
         # 4. 生成【有加總】的橫向合併表格
@@ -147,7 +147,7 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
         labels = ["編號", "水塔散熱噸數(RT)", "額定馬力(hp)", "實際耗功(kW)", "全年使用時數(hr)", "負載率(%)", "全年耗電(kWh)"]
         for r, txt in enumerate(labels):
             table.cell(r, 0).text = txt
-            fix_cell_font_ultimate(table.cell(r, 0), is_bold=True)
+            fix_cell_font(table.cell(r, 0), is_bold=True) # 這裡改回 fix_cell_font
 
         # 填寫數據與橫向合併
         col_ptr = 1
@@ -159,19 +159,18 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
             # 合併編號格
             c_n = table.cell(0, col_ptr).merge(table.cell(0, col_ptr + f_count - 1))
             c_n.text = t['name']
-            fix_cell_font_ultimate(c_n, is_bold=True)
+            fix_cell_font(c_n, is_bold=True)
             
             # 合併 RT 格
             c_r = table.cell(1, col_ptr).merge(table.cell(1, col_ptr + f_count - 1))
             c_r.text = f"{t['rt']}RT"
-            fix_cell_font_ultimate(c_r)
+            fix_cell_font(c_r)
 
             # 每一台的數據
             kw_per_fan = t['hp'] * 0.746
             for i in range(f_count):
                 cur_col = col_ptr + i
-                # 這裡抓取網頁上設定的該台風扇時數 (假設第一組風扇由 edit_df 順序排列)
-                h = 4380 # 您可以改為從 edit_df.iloc 抓取
+                h = 4380 # 全年時數範例
                 kwh = kw_per_fan * h
                 
                 table.cell(2, cur_col).text = f"{t['hp']:.1f}"
@@ -182,7 +181,7 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
                 
                 sum_kw += kw_per_fan
                 sum_kwh += kwh
-                for r in range(2, 7): fix_cell_font_ultimate(table.cell(r, cur_col))
+                for r in range(2, 7): fix_cell_font(table.cell(r, cur_col))
             col_ptr += f_count
 
         # --- 關鍵：填寫最後一欄【合計】 ---
@@ -190,11 +189,11 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
         table.cell(3, num_cols-1).text = f"{sum_kw:.1f}"
         table.cell(6, num_cols-1).text = f"{sum_kwh:,.0f}"
         for r in [0, 3, 6]:
-            fix_cell_font_ultimate(table.cell(r, num_cols-1), is_bold=True)
+            fix_cell_font(table.cell(r, num_cols-1), is_bold=True)
 
         buf = io.BytesIO()
         doc.save(buf)
-        st.success(f"✅ 生成完畢！投資額：{auto_invest:.1f}萬元")
+        st.success(f"✅ 生成完畢！")
         st.download_button("📥 下載修正版報告", buf.getvalue(), "P5分析報告_含加總.docx")
 
     except Exception as e:
