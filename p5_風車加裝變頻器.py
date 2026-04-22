@@ -121,7 +121,7 @@ for t in st.session_state.towers:
             wi_h = st.number_input(f"冬季時數(hr)", value=2190, key=f"wi_h_{t['name']}_{i}")
             
             after_config_results.append({
-                "parent_name": t['name'],
+                "name": t['name'],
                 "hp": t['hp'],
                 "sp_l": sp_l, "sp_h": sp_h,
                 "su_l": su_l, "su_h": su_h,
