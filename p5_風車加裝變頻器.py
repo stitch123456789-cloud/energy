@@ -102,32 +102,7 @@ for i, t in enumerate(st.session_state.towers):
 st.divider()
 
 # D. 改善後參數設定 (直式塊狀輸入)
-st.subheader("⚙️ 改善後：各台風扇運轉參數設定")
-st.info("請設定每一台風扇在不同季節的運轉參數（對齊表二格式）")
 
-after_config_results = []
-for t in st.session_state.towers:
-    f_count = int(t['fans'])
-    st.markdown(f"#### 🏗️ 組別：{t['name']}")
-    cols = st.columns(f_count)
-    for i in range(f_count):
-        with cols[i]:
-            st.markdown(f"**風扇 {t['name']}-F{i+1}**")
-            sp_l = st.number_input(f"春秋負載(%)", value=70, key=f"sp_l_{t['name']}_{i}")
-            sp_h = st.number_input(f"春秋時數(hr)", value=4380, key=f"sp_h_{t['name']}_{i}")
-            su_l = st.number_input(f"夏季負載(%)", value=85, key=f"su_l_{t['name']}_{i}")
-            su_h = st.number_input(f"夏季時數(hr)", value=2190, key=f"su_h_{t['name']}_{i}")
-            wi_l = st.number_input(f"冬季負載(%)", value=60, key=f"wi_l_{t['name']}_{i}")
-            wi_h = st.number_input(f"冬季時數(hr)", value=2190, key=f"wi_h_{t['name']}_{i}")
-            
-            after_config_results.append({
-                "name": t['name'],
-                "hp": t['hp'],
-                "sp_l": sp_l, "sp_h": sp_h,
-                "su_l": su_l, "su_h": su_h,
-                "wi_l": wi_l, "wi_h": wi_h
-            })
-    st.divider()
 
 # --- 3. 生成按鈕與核心邏輯 ---
 if st.button("🚀 生成專業效益報告", use_container_width=True):
@@ -221,10 +196,11 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
         final_suppress_kw = 0
 
         # 填寫每一台數據
+        # 填寫每一台數據
         for idx, fan in enumerate(after_config_results):
             c_idx = idx + 1
             kw_b = fan['hp'] * 0.746
-            
+                                
             # 計算數據
             sp_kw = kw_b * (fan['sp_l']/100)**3 * 1.06
             su_kw = kw_b * (fan['su_l']/100)**3 * 1.06
@@ -240,7 +216,7 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
             f_suppress = kw_b * 0.15
             
             # 填表
-            table2.cell(0, c_idx).text = fan['name']
+            table2.cell(0, c_idx).text = fan['name']  # ✨ 確保這一行是寫 fan['name']
             table2.cell(1, c_idx).text = f"{fan['sp_l']}%"
             table2.cell(2, c_idx).text = f"{fan['su_l']}%"
             table2.cell(3, c_idx).text = f"{fan['wi_l']}%"
