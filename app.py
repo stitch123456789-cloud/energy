@@ -36,7 +36,8 @@ mode = st.sidebar.radio(
      "2. 用戶基本資料",
      "3. 設備系統資料庫",
      "4. 冰水主機分析",
-     "5. 風車加裝變頻器"  # <-- 新增這一項
+     "5. 風車加裝變頻器",
+     "6. 日光燈更換 LED"  # ✨ 新增這一項
     ]
 )
 
@@ -67,6 +68,7 @@ if st.session_state['report_warehouse']:
         st.rerun()
 else:
     st.sidebar.info("尚未生成任何報告")
+
 # --- 3.5 自動計算平均電費 (最終精簡版) ---
 avg_price_auto = 5.0
 current_file = st.session_state.get('global_excel')
@@ -91,7 +93,7 @@ if current_file is not None:
         # 出錯時不干擾使用者，默默維持預設值 5.0
         pass
 
-# 存入 Session State 供 p1_變壓器分析.py 使用
+# 存入 Session State 供各分析模組使用
 st.session_state['auto_avg_price'] = avg_price_auto
 
 # --- 4. 轉接器邏輯 (同樣垂直對齊到最左邊或上一層) ---
@@ -107,18 +109,27 @@ elif mode == "2. 用戶基本資料":
     except FileNotFoundError:
         st.error("找不到 p2_用戶簡介.py")
 
-elif mode == "3. 設備系統資料庫": # <-- 新增這一段
+elif mode == "3. 設備系統資料庫":
     try:
         exec(open("p3_設備資料庫.py", encoding="utf-8").read())
     except FileNotFoundError:
         st.error("找不到 p3_設備資料庫.py")
-elif mode == "4. 冰水主機分析": # <--- 新增這一段
+
+elif mode == "4. 冰水主機分析":
     try:
         exec(open("p4_冰水主機分析.py", encoding="utf-8").read())
     except FileNotFoundError:
         st.error("找不到 p4_冰水主機分析.py")
-elif mode == "5. 風車加裝變頻器": # <--- 新增這一段
+
+elif mode == "5. 風車加裝變頻器":
     try:
         exec(open("p5_風車加裝變頻器.py", encoding="utf-8").read())
     except FileNotFoundError:
         st.error("找不到 p5_風車加裝變頻器.py")
+
+elif mode == "6. 日光燈更換 LED":  # ✨ 新增這一段轉接邏輯
+    try:
+        # 請確保你的檔案名稱與下方字串完全一致（如果有修改，請自行對應）
+        exec(open("p6_日光燈換LED.py", encoding="utf-8").read())
+    except FileNotFoundError:
+        st.error("找不到 p6_日光燈換LED.py，請確認檔名是否正確！")
