@@ -76,13 +76,21 @@ with col_c:
     rt_info = st.text_input("水塔總容量", value="1500RT")
     setup_note = st.text_input("運轉說明", value="僅開啟 2 台")
 
-st.subheader("📅 運轉參數設定")
-if "p5_op_data" not in st.session_state:
-    st.session_state.p5_op_data = pd.DataFrame({
-        "季節": ["春秋季", "夏季", "冬季"],
-        "時數(hr)": [4380, 2190, 2190],
-        "負載率(%)": [70, 85, 60]
-    })
+st.subheader("⚙️ 改善後：各台設備運轉參數調整")
+st.info("這裡可以針對每一台風扇設定不同的季節負載與時數（用於產出表二）")
+
+after_rows = []
+for t in st.session_state.towers:
+    for f in range(1, t['fans'] + 1):
+        after_rows.append({
+            "設備編號": f"{t['name']}-F{f}",
+            "春秋負載(%)": 60, "春秋時數(hr)": 2190,
+            "夏季負載(%)": 50, "夏季時數(hr)": 1095,
+            "冬季負載(%)": 0,  "冬季時數(hr)": 0
+        })
+
+# 讓使用者在網頁上直接改
+edit_after_df = st.data_editor(pd.DataFrame(after_rows), use_container_width=True, key="after_editor")
 current_op_df = st.data_editor(st.session_state.p5_op_data, use_container_width=True)
 
 if "towers" not in st.session_state:
