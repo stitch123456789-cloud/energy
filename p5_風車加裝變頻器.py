@@ -124,21 +124,26 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
         doc = Document("template_p5.docx")
         
         # 4. 強效標籤地圖 (完全對齊截圖中的 {{標籤}})
-        data_map = {
-            "{{UN}}": unit_name,
-            "{{COUNT}}": str(len(st.session_state.towers)),
-            "{{CH_INFO}}": ch_info,
-            "{{RT_INFO}}": rt_info,
-            "{{OLD_KWH}}": f"{total_old_kwh:,.0f}",
-            "{{SAVE_KWH}}": f"{save_kwh:,.0f}",
-            "{{SAVE_MONEY}}": f"{save_money:.2f}",
-            "{{INVEST}}": f"{auto_invest:.1f}",
-            "{{PAYBACK}}": f"{payback:.1f}",
-            "{{MT}}": f"{motor_hp:.1f}hp",
-            "{{ON}}": setup_note,
-            "{{MOTOR_SPEC}}": f"{motor_hp:.0f}HP x {total_hp/motor_hp:.0f}台",
-            "{{SUPPRESS_KW}}": f"{(base_total_kw * 0.15):,.1f}" # 抑低需量預估
-        }
+       if st.button("🚀 生成 P5 變頻器報告", use_container_width=True):
+           results = run_calculation(current_op_df)
+    
+           try:
+               doc = Document("template_p5.docx")
+        
+               data_map = {
+                   "{{UN}}": unit_name, "{{COUNT}}": "2", "{{CH_INFO}}": ch_info,
+                   "{{RT_INFO}}": rt_info, "{{MT}}": f"三台 {int(motor_hp)}hp",
+                   "{{ON}}": setup_note,
+                   "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
+                   "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
+                   "{{MOTOR_SPEC}}": f"{int(motor_hp)}HPx3台",
+                   "{{SAVE_RATE}}": f"{results['save_rate']:.2f}",
+                   "{{SAVE_MONEY}}": f"{results['save_money']:.2f}",
+                   "{{INVEST}}": f"{invest_amt:.1f}",
+                   "{{PAYBACK}}": f"{results['payback']:.1f}",
+                   "{{SUPPRESS_KW}}": "13",
+                   "{{13}}": "13"
+              }
         
         # 執行替換邏輯 (您原本正確的那套)
         safe_replace(doc, data_map)
