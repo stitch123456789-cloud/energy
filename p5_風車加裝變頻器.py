@@ -34,21 +34,20 @@ def fix_cell_font(cell, size=12, is_bold=False):
             run.font.color.rgb = RGBColor(0, 0, 0)
 
 def safe_replace(doc, data_map):
-    # 處理一般段落
+    """處理一般段落與表格內的碎裂標籤替換"""
+    # 處理段落
     for p in doc.paragraphs:
         full_text = "".join(run.text for run in p.runs)
         for key, val in data_map.items():
             if key in full_text:
                 full_text = full_text.replace(key, str(val))
-                p.clear() # 這是關鍵：清空舊的碎裂區塊
-                new_run = p.add_run(full_text) # 重新寫入整行
-                # 強制格式
+                p.clear()
+                new_run = p.add_run(full_text)
                 new_run.font.name = '標楷體'
                 new_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                 new_run.font.size = Pt(12)
                 new_run.font.color.rgb = RGBColor(0, 0, 0)
-
-    # 處理原本就有的表格 (如看板)
+    # 處理表格
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -57,16 +56,15 @@ def safe_replace(doc, data_map):
                     for key, val in data_map.items():
                         if key in full_text:
                             full_text = full_text.replace(key, str(val))
-                            p.text = full_text # 這裡直接替換文字
-                            # 補格式
+                            p.text = full_text
                             for run in p.runs:
                                 run.font.name = '標楷體'
                                 run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                                 run.font.color.rgb = RGBColor(0, 0, 0)
+
 # --- 2. Streamlit 介面設計 ---
 st.title("🌀 P5. 冷卻水塔風車變頻專業分析")
 
-# A. 基礎參數
 col_a, col_b, col_c = st.columns(3)
 with col_a:
     unit_name = st.text_input("單位名稱", value="貴單位")
@@ -78,7 +76,6 @@ with col_c:
     rt_info = st.text_input("水塔總容量", value="1500RT")
     setup_note = st.text_input("運轉說明", value="僅開啟 2 台")
 
-# B. 季節參數
 st.subheader("📅 運轉參數設定")
 if "p5_op_data" not in st.session_state:
     st.session_state.p5_op_data = pd.DataFrame({
@@ -88,7 +85,6 @@ if "p5_op_data" not in st.session_state:
     })
 current_op_df = st.data_editor(st.session_state.p5_op_data, use_container_width=True)
 
-# C. 設備增減管理 (保存在 session_state 防止消失)
 if "towers" not in st.session_state:
     st.session_state.towers = [{"name": "CT-1", "rt": 300, "hp": 15.0, "fans": 3}]
 
@@ -113,64 +109,67 @@ for i, t in enumerate(st.session_state.towers):
 # --- 3. 生成按鈕與核心邏輯 ---
 if st.button("🚀 生成專業效益報告", use_container_width=True):
     try:
-        # 1. 數據預算
+        # 1. 核心數據計算
         total_hp = sum(t['hp'] * t['fans'] for t in st.session_state.towers)
-        auto_invest = total_hp * 1.3 # 1.3萬/HP
+        calc_invest = total_hp * 1.3 # 1.3萬/HP
         
         total_old_kwh = 0
+        total_new_kwh = 0
         total_kw = total_hp * 0.746
-        for _, row in current_op_df.iterrows():
-            total_old_kwh += total_kw * float(row["時數(hr)"])
         
-        save_kwh = total_old_kwh * 0.38 # 假設節能率
+        for _, row in current_op_df.iterrows():
+            h = float(row["時數(hr)"])
+            l = float(row["負載率(%)"]) / 100
+            o_kwh = total_kw * h
+            n_kwh = total_kw * (l**3) * 1.06 * h
+            total_old_kwh += o_kwh
+            total_new_kwh += n_kwh
+        
+        save_kwh = total_old_kwh - total_new_kwh
         save_money = save_kwh * elec_val / 10000
-        payback = auto_invest / save_money if save_money > 0 else 0
+        payback = calc_invest / save_money if save_money > 0 else 0
 
-        # 2. 處理 Word
         doc = Document("template_p5.docx")
         
-       # 計算總馬力連動投資額
-        total_hp = sum(t['hp'] * t['fans'] for t in st.session_state.towers)
-        calc_invest = total_hp * 1.3  # 1.3萬/HP
-
+        # 2. 文字標籤地圖
         data_map = {
             "{{UN}}": unit_name,
             "{{COUNT}}": str(len(st.session_state.towers)),
             "{{CH_INFO}}": ch_info,
             "{{RT_INFO}}": rt_info,
-            "{{MT}}": f"{motor_hp}hp",  # 修正：補上馬力標籤
-            "{{ON}}": setup_note,       # 修正：補上運轉說明
-            "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
-            "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
+            "{{MT}}": f"{motor_hp}hp",
+            "{{ON}}": setup_note,
+            "{{OLD_KWH}}": f"{total_old_kwh:,.0f}",
+            "{{SAVE_KWH}}": f"{save_kwh:,.0f}",
             "{{MOTOR_SPEC}}": f"{motor_hp}HP x {int(total_hp/motor_hp)}台",
-            "{{SAVE_MONEY}}": f"{results['save_money']:.2f}",
-            "{{INVEST}}": f"{calc_invest:.1f}", # 修正：連動投資額
-            "{{PAYBACK}}": f"{(calc_invest/results['save_money'] if results['save_money']>0 else 0):.1f}",
+            "{{SAVE_MONEY}}": f"{save_money:.2f}",
+            "{{INVEST}}": f"{calc_invest:.1f}",
+            "{{PAYBACK}}": f"{payback:.1f}",
             "{{SUPPRESS_KW}}": "13"
         }
         
-        safe_replace_logic(doc, data_map)
+        safe_replace(doc, data_map)
 
         for p in doc.paragraphs:
             if "[[OLD_TABLE]]" in p.text: p.text = ""
 
-        # 3. 生成橫向合併表格 (CT-1 格式)
+        # 3. 生成橫向合併表格
         doc.add_page_break()
         doc.add_paragraph("【表一、現況耗電明細分析表 (橫向擴展)】")
         
-        fan_data_list = []
+        fan_list = []
         for t in st.session_state.towers:
             for _ in range(t['fans']):
-                fan_data_list.append({"hp": t['hp'], "kw": t['hp']*0.746, "kwh": t['hp']*0.746*4380})
+                fan_list.append({"hp": t['hp'], "rt": t['rt'], "name": t['name']})
 
-        num_cols = 1 + len(fan_data_list) + 1
+        num_cols = 1 + len(fan_list) + 1
         table = doc.add_table(rows=7, cols=num_cols)
         set_table_border(table)
 
         labels = ["編號", "水塔散熱噸數(RT)", "額定馬力(hp)", "實際耗功(kW)", "全年使用時數(hr)", "負載率(%)", "全年耗電(kWh)"]
         for r, txt in enumerate(labels):
-            table.cell(r, 0).text = txt
             fix_cell_font(table.cell(r, 0), is_bold=True)
+            table.cell(r, 0).text = txt
 
         col_ptr = 1
         s_kw, s_kwh = 0, 0
@@ -195,20 +194,15 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
             col_ptr += f_count
 
         # 合計欄
-       # 在寫完每一台數據後，寫入最後一欄 (合計)
-        # num_cols - 1 是最後一列
         table.cell(0, num_cols-1).text = "合計"
-        table.cell(3, num_cols-1).text = f"{(total_hp * 0.746):.1f}" # 總 kW
-        table.cell(6, num_cols-1).text = f"{results['old_total']:,.0f}" # 總耗電
-        
-        # 記得跑一次字體修正
-        for r in [0, 3, 6]:
-            fix_cell_font(table.cell(r, num_cols-1), is_bold=True)
+        table.cell(3, num_cols-1).text = f"{s_kw:.1f}"
+        table.cell(6, num_cols-1).text = f"{s_kwh:,.0f}"
+        for r in [0, 3, 6]: fix_cell_font(table.cell(r, num_cols-1), is_bold=True)
 
         buf = io.BytesIO()
         doc.save(buf)
-        st.success("✅ 整合成功！文字標籤已替換，表格已加總。")
-        st.download_button("📥 下載完整報告", buf.getvalue(), "風車分析整合版.docx")
+        st.success("✅ 報告已生成！")
+        st.download_button("📥 下載完整報告", buf.getvalue(), "風車分析報告.docx")
 
     except Exception as e:
         st.error(f"❌ 錯誤: {e}")
