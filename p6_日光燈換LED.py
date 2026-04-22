@@ -44,15 +44,47 @@ else:
     target_lights_list = []
 
     # 遍歷所有分頁搜尋日光燈
-    for sheet_name, df in all_sheets.items():
-        if '表九' in sheet_name and '種類' in df.columns:
-            # 過濾邏輯：包含 日光燈/螢光燈/T8/T5 且 不含 LED
-            mask = (df['種類'].str.contains('日光燈|螢光燈|T8|T5|傳統', na=False)) & \
-                   (~df['種類'].str.contains('LED', na=False, case=False))
-            found = df[mask].copy()
-            if not found.empty:
-                found['來源建築物'] = sheet_name
-                target_lights_list.append(found)
+    for sheet_name, df_raw in all_sheets.items():
+        if '表九' in sheet_name:
+            
+            # 1. 自動尋找真正的「表頭」在哪一列 (往下掃描前 10 列)
+            header_idx = -1
+            for idx, row in df_raw.head(10).iterrows():
+                row_str = "".join([str(val) for val in row.values])
+                if '種類' in row_str or '設備系統' in row_str:
+                    header_idx = idx
+                    break
+            
+            # 如果有找到表頭，重新定位資料
+            if header_idx != -1:
+                df = df_raw.iloc[header_idx+1:].copy()
+                df.columns = df_raw.iloc[header_idx]
+                
+                # 2. 動態鎖定 B、C、D 列的真實名稱 (包含相似字眼即可)
+                type_col = next((col for col in df.columns if '種類' in str(col) or '設備' in str(col)), None)
+                qty_col = next((col for col in df.columns if '數量' in str(col)), None)
+                watt_col = next((col for col in df.columns if '瓦數' in str(col) or '容量' in str(col)), None)
+                
+                if type_col and qty_col and watt_col:
+                    # 確保數量跟瓦數是數字格式，避免文字夾雜報錯
+                    df[qty_col] = pd.to_numeric(df[qty_col], errors='coerce').fillna(0)
+                    df[watt_col] = pd.to_numeric(df[watt_col], errors='coerce').fillna(0)
+                    
+                    # 3. 過濾邏輯：包含 日光燈/螢光燈/T8/T5 且 不含 LED
+                    mask = (df[type_col].str.contains('日光燈|螢光燈|T8|T5|傳統', na=False)) & \
+                           (~df[type_col].str.contains('LED', na=False, case=False))
+                    
+                    found = df[mask].copy()
+                    
+                    if not found.empty:
+                        found['來源建築物'] = sheet_name
+                        # 4. 把欄位名稱統一標準化，這樣下面的計算和表格才不會出錯
+                        found = found.rename(columns={
+                            type_col: '種類', 
+                            qty_col: '數量(具)', 
+                            watt_col: '瓦數(W/具)'
+                        })
+                        target_lights_list.append(found)
 
     if not target_lights_list:
         st.success("✅ 系統掃描完畢：該單位似乎已全面採用 LED，或 Excel 中未發現傳統日光燈資料。")
