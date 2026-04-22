@@ -34,8 +34,6 @@ def fix_cell_font(cell, size=12, is_bold=False):
             run.font.color.rgb = RGBColor(0, 0, 0)
 
 def safe_replace(doc, data_map):
-    """處理一般段落與表格內的碎裂標籤替換"""
-    # 處理段落
     for p in doc.paragraphs:
         full_text = "".join(run.text for run in p.runs)
         for key, val in data_map.items():
@@ -47,7 +45,6 @@ def safe_replace(doc, data_map):
                 new_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                 new_run.font.size = Pt(12)
                 new_run.font.color.rgb = RGBColor(0, 0, 0)
-    # 處理表格
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -63,8 +60,14 @@ def safe_replace(doc, data_map):
                                 run.font.color.rgb = RGBColor(0, 0, 0)
 
 # --- 2. Streamlit 介面設計 ---
+st.set_page_config(layout="wide") # 使用寬螢幕模式更適合多台設備排版
 st.title("🌀 P5. 冷卻水塔風車變頻專業分析")
 
+# 初始化 Session State
+if "towers" not in st.session_state:
+    st.session_state.towers = [{"name": "CT-1", "rt": 300, "hp": 15.0, "fans": 3}]
+
+# A. 基礎參數
 col_a, col_b, col_c = st.columns(3)
 with col_a:
     unit_name = st.text_input("單位名稱", value="貴單位")
@@ -76,46 +79,7 @@ with col_c:
     rt_info = st.text_input("水塔總容量", value="1500RT")
     setup_note = st.text_input("運轉說明", value="僅開啟 2 台")
 
-st.subheader("⚙️ 改善後：各台風扇運轉參數設定")
-st.info("請設定每一台風扇在不同季節的運轉參數（對齊表二格式）")
-
-# 建立一個容器來存儲所有風扇的設定值
-after_config_results = []
-
-# 動態產生輸入介面
-for t in st.session_state.towers:
-    f_count = int(t['fans'])
-    st.markdown(f"#### 🏗️ 組別：{t['name']}")
-    
-    # 橫向排列每一台風扇
-    cols = st.columns(f_count)
-    
-    for i in range(f_count):
-        with cols[i]:
-            st.write(f"**風扇 F{i+1}**")
-            # 垂直排列該風扇的所有參數
-            sp_l = st.number_input(f"春秋負載(%)", value=70, key=f"sp_l_{t['name']}_{i}")
-            sp_h = st.number_input(f"春秋時數(hr)", value=4380, key=f"sp_h_{t['name']}_{i}")
-            
-            su_l = st.number_input(f"夏季負載(%)", value=85, key=f"su_l_{t['name']}_{i}")
-            su_h = st.number_input(f"夏季時數(hr)", value=2190, key=f"su_h_{t['name']}_{i}")
-            
-            wi_l = st.number_input(f"冬季負載(%)", value=60, key=f"wi_l_{t['name']}_{i}")
-            wi_h = st.number_input(f"冬季時數(hr)", value=2190, key=f"wi_h_{t['name']}_{i}")
-            
-            # 將這一台的結果存入 list 供後續 Word 生成使用
-            after_config_results.append({
-                "name": f"{t['name']}-F{i+1}",
-                "sp_l": sp_l, "sp_h": sp_h,
-                "su_l": su_l, "su_h": su_h,
-                "wi_l": wi_l, "wi_h": wi_h
-            })
-    st.divider()
-current_op_df = st.data_editor(st.session_state.p5_op_data, use_container_width=True)
-
-if "towers" not in st.session_state:
-    st.session_state.towers = [{"name": "CT-1", "rt": 300, "hp": 15.0, "fans": 3}]
-
+# B. 設備管理 (側邊欄)
 with st.sidebar:
     st.header("⚙️ 設備管理")
     if st.button("➕ 新增一組水塔"):
@@ -126,6 +90,7 @@ with st.sidebar:
         if len(st.session_state.towers) > 1:
             st.session_state.towers.pop(); st.rerun()
 
+# C. 顯示並編輯設備
 for i, t in enumerate(st.session_state.towers):
     with st.expander(f"配置：{t['name']}", expanded=True):
         tc1, tc2, tc3, tc4 = st.columns(4)
@@ -134,32 +99,58 @@ for i, t in enumerate(st.session_state.towers):
         t['hp'] = tc3.number_input("馬力(HP)", value=t['hp'], key=f"h_{i}")
         t['fans'] = tc4.number_input("台數", min_value=1, max_value=5, value=t['fans'], key=f"f_{i}")
 
+st.divider()
+
+# D. 改善後參數設定 (直式塊狀輸入)
+st.subheader("⚙️ 改善後：各台風扇運轉參數設定")
+st.info("請設定每一台風扇在不同季節的運轉參數（對齊表二格式）")
+
+after_config_results = []
+for t in st.session_state.towers:
+    f_count = int(t['fans'])
+    st.markdown(f"#### 🏗️ 組別：{t['name']}")
+    cols = st.columns(f_count)
+    for i in range(f_count):
+        with cols[i]:
+            st.markdown(f"**風扇 {t['name']}-F{i+1}**")
+            sp_l = st.number_input(f"春秋負載(%)", value=70, key=f"sp_l_{t['name']}_{i}")
+            sp_h = st.number_input(f"春秋時數(hr)", value=4380, key=f"sp_h_{t['name']}_{i}")
+            su_l = st.number_input(f"夏季負載(%)", value=85, key=f"su_l_{t['name']}_{i}")
+            su_h = st.number_input(f"夏季時數(hr)", value=2190, key=f"su_h_{t['name']}_{i}")
+            wi_l = st.number_input(f"冬季負載(%)", value=60, key=f"wi_l_{t['name']}_{i}")
+            wi_h = st.number_input(f"冬季時數(hr)", value=2190, key=f"wi_h_{t['name']}_{i}")
+            
+            after_config_results.append({
+                "parent_name": t['name'],
+                "hp": t['hp'],
+                "sp_l": sp_l, "sp_h": sp_h,
+                "su_l": su_l, "su_h": su_h,
+                "wi_l": wi_l, "wi_h": wi_h
+            })
+    st.divider()
+
 # --- 3. 生成按鈕與核心邏輯 ---
 if st.button("🚀 生成專業效益報告", use_container_width=True):
     try:
-        # 1. 核心數據計算
+        # 1. 核心計算 (與文字替換標籤連動)
         total_hp = sum(t['hp'] * t['fans'] for t in st.session_state.towers)
-        calc_invest = total_hp * 1.3 # 1.3萬/HP
+        calc_invest = total_hp * 1.3
         
-        total_old_kwh = 0
-        total_new_kwh = 0
-        total_kw = total_hp * 0.746
+        # 這裡的計算需要與 after_config_results 同步
+        total_old_kwh = sum((t['hp']*0.746) * 8760 * t['fans'] for t in st.session_state.towers) # 簡化假設
+        total_after_kwh = 0
+        for fan in after_config_results:
+            kw_b = fan['hp'] * 0.746
+            total_after_kwh += (kw_b * (fan['sp_l']/100)**3 * 1.06 * fan['sp_h'])
+            total_after_kwh += (kw_b * (fan['su_l']/100)**3 * 1.06 * fan['su_h'])
+            total_after_kwh += (kw_b * (fan['wi_l']/100)**3 * 1.06 * fan['wi_h'])
         
-        for _, row in current_op_df.iterrows():
-            h = float(row["時數(hr)"])
-            l = float(row["負載率(%)"]) / 100
-            o_kwh = total_kw * h
-            n_kwh = total_kw * (l**3) * 1.06 * h
-            total_old_kwh += o_kwh
-            total_new_kwh += n_kwh
-        
-        save_kwh = total_old_kwh - total_new_kwh
+        save_kwh = total_old_kwh - total_after_kwh
         save_money = save_kwh * elec_val / 10000
         payback = calc_invest / save_money if save_money > 0 else 0
 
         doc = Document("template_p5.docx")
         
-        # 2. 文字標籤地圖
         data_map = {
             "{{UN}}": unit_name,
             "{{COUNT}}": str(len(st.session_state.towers)),
@@ -173,162 +164,124 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
             "{{SAVE_MONEY}}": f"{save_money:.2f}",
             "{{INVEST}}": f"{calc_invest:.1f}",
             "{{PAYBACK}}": f"{payback:.1f}",
-            "{{SUPPRESS_KW}}": "13"
+            "{{SUPPRESS_KW}}": f"{total_hp * 0.746 * 0.15:.1f}"
         }
-        
         safe_replace(doc, data_map)
 
-        for p in doc.paragraphs:
-            if "[[OLD_TABLE]]" in p.text: p.text = ""
-
-        # 3. 生成橫向合併表格
+        # 2. 生成表一 (現況)
         doc.add_page_break()
-        doc.add_paragraph("【表一、現況耗電明細分析表 (橫向擴展)】")
+        doc.add_paragraph("【表一、現況耗電明細分析表】")
+        num_fans = len(after_config_results)
+        num_cols = 1 + num_fans + 1
+        table1 = doc.add_table(rows=7, cols=num_cols)
+        set_table_border(table1)
         
-        fan_list = []
-        for t in st.session_state.towers:
-            for _ in range(t['fans']):
-                fan_list.append({"hp": t['hp'], "rt": t['rt'], "name": t['name']})
-
-        num_cols = 1 + len(fan_list) + 1
-        table = doc.add_table(rows=7, cols=num_cols)
-        set_table_border(table)
-
-        labels = ["編號", "水塔散熱噸數(RT)", "額定馬力(hp)", "實際耗功(kW)", "全年使用時數(hr)", "負載率(%)", "全年耗電(kWh)"]
-        for r, txt in enumerate(labels):
-            fix_cell_font(table.cell(r, 0), is_bold=True)
-            table.cell(r, 0).text = txt
+        labels1 = ["編號", "水塔散熱噸數(RT)", "額定馬力(hp)", "實際耗功(kW)", "全年使用時數(hr)", "負載率(%)", "全年耗電(kWh)"]
+        for r, txt in enumerate(labels1): 
+            table1.cell(r, 0).text = txt
+            fix_cell_font(table1.cell(r, 0), is_bold=True)
 
         col_ptr = 1
-        s_kw, s_kwh = 0, 0
+        total_old_kw_sum = 0
+        total_old_kwh_sum = 0
         for t in st.session_state.towers:
             f_count = t['fans']
-            c_n = table.cell(0, col_ptr).merge(table.cell(0, col_ptr + f_count - 1))
+            c_n = table1.cell(0, col_ptr).merge(table1.cell(0, col_ptr + f_count - 1))
             c_n.text = t['name']; fix_cell_font(c_n, is_bold=True)
-            
-            c_r = table.cell(1, col_ptr).merge(table.cell(1, col_ptr + f_count - 1))
-            c_r.text = f"{t['rt']}RT"; fix_cell_font(c_r)
-
             for i in range(f_count):
                 kw_f = t['hp'] * 0.746
-                kwh_f = kw_f * 4380
-                table.cell(2, col_ptr + i).text = f"{t['hp']:.1f}"
-                table.cell(3, col_ptr + i).text = f"{kw_f:.1f}"
-                table.cell(4, col_ptr + i).text = "4,380"
-                table.cell(5, col_ptr + i).text = "100%"
-                table.cell(6, col_ptr + i).text = f"{kwh_f:,.0f}"
-                s_kw += kw_f; s_kwh += kwh_f
-                for r in range(2, 7): fix_cell_font(table.cell(r, col_ptr + i))
+                kwh_f = kw_f * 8760
+                table1.cell(2, col_ptr+i).text = f"{t['hp']}"
+                table1.cell(3, col_ptr+i).text = f"{kw_f:.1f}"
+                table1.cell(4, col_ptr+i).text = "8,760"
+                table1.cell(5, col_ptr+i).text = "100%"
+                table1.cell(6, col_ptr+i).text = f"{kwh_f:,.0f}"
+                total_old_kw_sum += kw_f
+                total_old_kwh_sum += kwh_f
+                for r in range(1, 7): fix_cell_font(table1.cell(r, col_ptr+i))
             col_ptr += f_count
-# --- [新增] 生成改善後節能效益明細表 ---
+            
+        table1.cell(0, num_cols-1).text = "合計"
+        table1.cell(3, num_cols-1).text = f"{total_old_kw_sum:.1f}"
+        table1.cell(6, num_cols-1).text = f"{total_old_kwh_sum:,.0f}"
+        for r in [0, 3, 6]: fix_cell_font(table1.cell(r, num_cols-1), is_bold=True)
+
+        # 3. 生成表二 (改善後)
         doc.add_paragraph("\n【表二、改善後變頻節能效益分析表】")
+        table2 = doc.add_table(rows=20, cols=num_cols)
+        set_table_border(table2)
         
-        # 欄數與改善前一致 (標題欄 + 風扇台數 + 合計欄)
-        table_after = doc.add_table(rows=20, cols=num_cols)
-        set_table_border(table_after)
+        labels2 = ["編號", "春秋季負載率(%)", "夏季負載率(%)", "冬季負載率(%)", "春秋季使用時數(hr)", "夏季使用時數(hr)", "冬季使用時數(hr)", "春秋季耗功(kW)", "夏季耗功(kW)", "冬季耗功(kW)", "春秋季耗電(kWh)", "夏季耗電(kWh)", "冬季耗電(kWh)", "改善後總耗電(kWh)", "節省耗電(kWh)", "抑低需量(kW)", "節約金額(萬元/年)", "節能比(%)", "註1：變頻器損失", "註2：平均電費(元/kWh)"]
+        for r, txt in enumerate(labels2):
+            table2.cell(r, 0).text = txt
+            fix_cell_font(table2.cell(r, 0), is_bold=True)
 
-        # 1. 填寫左側標題標籤
-        after_labels = [
-            "編號", "春秋季負載率(%)", "夏季負載率(%)", "冬季負載率(%)",
-            "春秋季使用時數(hr)", "夏季使用時數(hr)", "冬季使用時數(hr)",
-            "春秋季耗功(kW)", "夏季耗功(kW)", "冬季耗功(kW)",
-            "春秋季耗電(kWh)", "夏季耗電(kWh)", "冬季耗電(kWh)",
-            "改善後總耗電(kWh)", "節省耗電(kWh)", "抑低需量(kW)",
-            "節約金額(萬元/年)", "節能比(%)", "註1：變頻器損失", "註2：平均電費(元/kWh)"
-        ]
-        for r, txt in enumerate(after_labels):
-            table_after.cell(r, 0).text = txt
-            fix_cell_font(table_after.cell(r, 0), is_bold=True)
+        final_after_kwh = 0
+        final_save_kwh = 0
+        final_suppress_kw = 0
 
-        # 2. 準備季節參數 (從介面 current_op_df 抓取)
-        # 假設 0:春秋, 1:夏, 2:冬
-        s_spring = current_op_df.iloc[0]
-        s_summer = current_op_df.iloc[1]
-        s_winter = current_op_df.iloc[2]
+        # 填寫每一台數據
+        for idx, fan in enumerate(after_config_results):
+            c_idx = idx + 1
+            kw_b = fan['hp'] * 0.746
+            
+            # 計算數據
+            sp_kw = kw_b * (fan['sp_l']/100)**3 * 1.06
+            su_kw = kw_b * (fan['su_l']/100)**3 * 1.06
+            wi_kw = kw_b * (fan['wi_l']/100)**3 * 1.06
+            
+            sp_kwh = sp_kw * fan['sp_h']
+            su_kwh = su_kw * fan['su_h']
+            wi_kwh = wi_kw * fan['wi_h']
+            
+            f_after_kwh = sp_kwh + su_kwh + wi_kwh
+            f_old_kwh = kw_b * (fan['sp_h'] + fan['su_h'] + fan['wi_h'])
+            f_save_kwh = f_old_kwh - f_after_kwh
+            f_suppress = kw_b * 0.15
+            
+            # 填表
+            table2.cell(0, c_idx).text = fan['name']
+            table2.cell(1, c_idx).text = f"{fan['sp_l']}%"
+            table2.cell(2, c_idx).text = f"{fan['su_l']}%"
+            table2.cell(3, c_idx).text = f"{fan['wi_l']}%"
+            table2.cell(4, c_idx).text = f"{fan['sp_h']:,.0f}"
+            table2.cell(5, c_idx).text = f"{fan['su_h']:,.0f}"
+            table2.cell(6, c_idx).text = f"{fan['wi_h']:,.0f}"
+            table2.cell(7, c_idx).text = f"{sp_kw:.2f}"
+            table2.cell(8, c_idx).text = f"{su_kw:.2f}"
+            table2.cell(9, c_idx).text = f"{wi_kw:.2f}"
+            table2.cell(10, c_idx).text = f"{sp_kwh:,.0f}"
+            table2.cell(11, c_idx).text = f"{su_kwh:,.0f}"
+            table2.cell(12, c_idx).text = f"{wi_kwh:,.0f}"
+            table2.cell(13, c_idx).text = f"{f_after_kwh:,.0f}"
+            table2.cell(14, c_idx).text = f"{f_save_kwh:,.0f}"
+            table2.cell(15, c_idx).text = f"{f_suppress:.1f}"
+            
+            final_after_kwh += f_after_kwh
+            final_save_kwh += f_save_kwh
+            final_suppress_kw += f_suppress
+            for r in range(16): fix_cell_font(table2.cell(r, c_idx))
 
-        # 3. 填寫數據
-        col_ptr = 1
-        total_after_kwh = 0
-        total_save_kwh = 0
-        total_suppress_kw = 0
+        # 表二合計與底部合併
+        table2.cell(0, num_cols-1).text = "合計"
+        table2.cell(13, num_cols-1).text = f"{final_after_kwh:,.0f}"
+        table2.cell(14, num_cols-1).text = f"{final_save_kwh:,.0f}"
+        table2.cell(15, num_cols-1).text = f"{final_suppress_kw:.1f}"
+        for r in [0, 13, 14, 15]: fix_cell_font(table2.cell(r, num_cols-1), is_bold=True)
         
-        for t in st.session_state.towers:
-            f_count = int(t['fans'])
-            # 合併編號格
-            c_n_after = table_after.cell(0, col_ptr).merge(table_after.cell(0, col_ptr + f_count - 1))
-            c_n_after.text = t['name']
-            fix_cell_font(c_n_after, is_bold=True)
-
-            kw_base = t['hp'] * 0.746
-            for i in range(f_count):
-                cur_c = col_ptr + i
-                
-                # 計算各季變頻功耗 (Load^3 * 1.06)
-                spring_kw = kw_base * ((s_spring['負載率(%)']/100)**3) * 1.06
-                summer_kw = kw_base * ((s_summer['負載率(%)']/100)**3) * 1.06
-                winter_kw = kw_base * ((s_winter['負載率(%)']/100)**3) * 1.06
-                
-                # 各季耗電
-                spring_kwh = spring_kw * s_spring['時數(hr)']
-                summer_kwh = summer_kw * s_summer['時數(hr)']
-                winter_kwh = winter_kw * s_winter['時數(hr)']
-                
-                # 該台風扇節電量 (改善前固定 Load=100% 耗電 - 改善後各季總和)
-                old_kwh_fan = kw_base * (s_spring['時數(hr)'] + s_summer['時數(hr)'] + s_winter['時數(hr)'])
-                after_kwh_fan = spring_kwh + summer_kwh + winter_kwh
-                save_kwh_fan = old_kwh_fan - after_kwh_fan
-                
-                # 填入格子
-                table_after.cell(1, cur_c).text = f"{s_spring['負載率(%)']}%"
-                table_after.cell(2, cur_c).text = f"{s_summer['負載率(%)']}%"
-                table_after.cell(3, cur_c).text = f"{s_winter['負載率(%)']}%"
-                table_after.cell(4, cur_c).text = f"{s_spring['時數(hr)']:,.0f}"
-                table_after.cell(5, cur_c).text = f"{s_summer['時數(hr)']:,.0f}"
-                table_after.cell(6, cur_c).text = f"{s_winter['時數(hr)']:,.0f}"
-                table_after.cell(7, cur_c).text = f"{spring_kw:.1f}"
-                table_after.cell(8, cur_c).text = f"{summer_kw:.1f}"
-                table_after.cell(9, cur_c).text = f"{winter_kw:.1f}"
-                table_after.cell(10, cur_c).text = f"{spring_kwh:,.0f}"
-                table_after.cell(11, cur_c).text = f"{summer_kwh:,.0f}"
-                table_after.cell(12, cur_c).text = f"{winter_kwh:,.0f}"
-                table_after.cell(13, cur_c).text = f"{after_kwh_fan:,.0f}"
-                table_after.cell(14, cur_c).text = f"{save_kwh_fan:,.0f}"
-                table_after.cell(15, cur_c).text = f"{(kw_base * 0.15):.1f}" # 抑低需量估計
-                
-                # 累加總計
-                total_after_kwh += after_kwh_fan
-                total_save_kwh += save_kwh_fan
-                total_suppress_kw += (kw_base * 0.15)
-                
-                for r in range(1, 16): fix_cell_font(table_after.cell(r, cur_c))
-            col_ptr += f_count
-
-        # 4. 填寫合計與下方合併欄位
-        table_after.cell(0, num_cols-1).text = "合計"
-        # ... (中間各季加總可視需要補上)
-        table_after.cell(13, num_cols-1).text = f"{total_after_kwh:,.0f}"
-        table_after.cell(14, num_cols-1).text = f"{total_save_kwh:,.0f}"
-        table_after.cell(15, num_cols-1).text = f"{total_suppress_kw:.1f}"
-        for r in [0, 13, 14, 15]: fix_cell_font(table_after.cell(r, num_cols-1), is_bold=True)
-
-        # 合併底部的全寬欄位
+        # 底部合併欄位 (16-19列)
         for row_idx in range(16, 20):
-            merged_cell = table_after.cell(row_idx, 1).merge(table_after.cell(row_idx, num_cols-1))
-            if row_idx == 16: merged_cell.text = f"{(total_save_kwh * elec_val / 10000):.1f}"
-            elif row_idx == 17: merged_cell.text = f"{(total_save_kwh / (total_after_kwh + total_save_kwh) * 100):.1f}%"
-            elif row_idx == 18: merged_cell.text = "6%"
-            elif row_idx == 19: merged_cell.text = f"{elec_val:.2f}"
-            fix_cell_font(merged_cell, is_bold=True)
-        # 合計欄
-        table.cell(0, num_cols-1).text = "合計"
-        table.cell(3, num_cols-1).text = f"{s_kw:.1f}"
-        table.cell(6, num_cols-1).text = f"{s_kwh:,.0f}"
-        for r in [0, 3, 6]: fix_cell_font(table.cell(r, num_cols-1), is_bold=True)
+            merged = table2.cell(row_idx, 1).merge(table2.cell(row_idx, num_cols-1))
+            if row_idx == 16: merged.text = f"{(final_save_kwh * elec_val / 10000):.1f}"
+            elif row_idx == 17: merged.text = f"{(final_save_kwh / (final_after_kwh + final_save_kwh) * 100):.1f}%"
+            elif row_idx == 18: merged.text = "6.0%"
+            elif row_idx == 19: merged.text = f"{elec_val:.2f}"
+            fix_cell_font(merged, is_bold=True)
 
         buf = io.BytesIO()
         doc.save(buf)
-        st.success("✅ 報告已生成！")
-        st.download_button("📥 下載完整報告", buf.getvalue(), "風車分析報告.docx")
+        st.success("✅ 報告生成成功！")
+        st.download_button("📥 下載完整報告", buf.getvalue(), "風車分析專業版.docx")
 
     except Exception as e:
-        st.error(f"❌ 錯誤: {e}")
+        st.error(f"❌ 發生錯誤: {e}")
