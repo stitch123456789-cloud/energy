@@ -4,6 +4,7 @@ from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
 import io
+import re
 
 # --- 1. Word 工具：格式鎖定 (確保產出的 Word 標楷體、不跑位) ---
 def set_cell_style(cell, text, size=10, is_bold=False):
@@ -33,12 +34,22 @@ else:
     all_extracted_dfs = []
 
     for sheet_name, df_raw in all_sheets.items():
-        if '表九之二' in sheet_name:
+        
+        # ✨ 1. 分頁名稱模糊清洗：去除所有空白、換行符號
+        clean_name = re.sub(r'\s+', '', sheet_name)
+        
+        # ✨ 2. 模糊關鍵字比對：只要包含以下任何一種寫法就抓！
+        # 涵蓋：表九之二、表9之2、表9-2、表九-2... 等等
+        is_target_sheet = bool(re.search(r'表九之二|表9之2|表9-2|表九-2', clean_name))
+        
+        if is_target_sheet:
+            st.toast(f"🔍 模糊比對成功：正在讀取 [{sheet_name}]...") # 畫面右下角跳出提示
+            
             # 尋找表頭座標 (掃描前20列)
             header_row_idx = -1
             for idx, row in df_raw.head(20).iterrows():
                 row_str = "".join([str(v) for v in row.values if pd.notna(v)])
-                # ✨ 根據你截圖的關鍵字：編號、設備系統、數量
+                # 根據你截圖的關鍵字：編號、設備系統、數量
                 if '編號' in row_str and ('設備系統' in row_str or '種類' in row_str):
                     header_row_idx = idx
                     break
@@ -53,7 +64,7 @@ else:
                 # 清除完全空白的列
                 df = df.dropna(axis=1, how='all')
                 
-                df['來源建築物'] = sheet_name
+                df['來源建築物'] = sheet_name # 這裡保留原本長長的名字，讓你知道資料是哪來的
                 all_extracted_dfs.append(df)
 
     if not all_extracted_dfs:
