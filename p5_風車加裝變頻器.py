@@ -192,7 +192,105 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
                 s_kw += kw_f; s_kwh += kwh_f
                 for r in range(2, 7): fix_cell_font(table.cell(r, col_ptr + i))
             col_ptr += f_count
+# --- [新增] 生成改善後節能效益明細表 ---
+        doc.add_paragraph("\n【表二、改善後變頻節能效益分析表】")
+        
+        # 欄數與改善前一致 (標題欄 + 風扇台數 + 合計欄)
+        table_after = doc.add_table(rows=20, cols=num_cols)
+        set_table_border(table_after)
 
+        # 1. 填寫左側標題標籤
+        after_labels = [
+            "編號", "春秋季負載率(%)", "夏季負載率(%)", "冬季負載率(%)",
+            "春秋季使用時數(hr)", "夏季使用時數(hr)", "冬季使用時數(hr)",
+            "春秋季耗功(kW)", "夏季耗功(kW)", "冬季耗功(kW)",
+            "春秋季耗電(kWh)", "夏季耗電(kWh)", "冬季耗電(kWh)",
+            "改善後總耗電(kWh)", "節省耗電(kWh)", "抑低需量(kW)",
+            "節約金額(萬元/年)", "節能比(%)", "註1：變頻器損失", "註2：平均電費(元/kWh)"
+        ]
+        for r, txt in enumerate(after_labels):
+            table_after.cell(r, 0).text = txt
+            fix_cell_font(table_after.cell(r, 0), is_bold=True)
+
+        # 2. 準備季節參數 (從介面 current_op_df 抓取)
+        # 假設 0:春秋, 1:夏, 2:冬
+        s_spring = current_op_df.iloc[0]
+        s_summer = current_op_df.iloc[1]
+        s_winter = current_op_df.iloc[2]
+
+        # 3. 填寫數據
+        col_ptr = 1
+        total_after_kwh = 0
+        total_save_kwh = 0
+        total_suppress_kw = 0
+        
+        for t in st.session_state.towers:
+            f_count = int(t['fans'])
+            # 合併編號格
+            c_n_after = table_after.cell(0, col_ptr).merge(table_after.cell(0, col_ptr + f_count - 1))
+            c_n_after.text = t['name']
+            fix_cell_font(c_n_after, is_bold=True)
+
+            kw_base = t['hp'] * 0.746
+            for i in range(f_count):
+                cur_c = col_ptr + i
+                
+                # 計算各季變頻功耗 (Load^3 * 1.06)
+                spring_kw = kw_base * ((s_spring['負載率(%)']/100)**3) * 1.06
+                summer_kw = kw_base * ((s_summer['負載率(%)']/100)**3) * 1.06
+                winter_kw = kw_base * ((s_winter['負載率(%)']/100)**3) * 1.06
+                
+                # 各季耗電
+                spring_kwh = spring_kw * s_spring['時數(hr)']
+                summer_kwh = summer_kw * s_summer['時數(hr)']
+                winter_kwh = winter_kw * s_winter['時數(hr)']
+                
+                # 該台風扇節電量 (改善前固定 Load=100% 耗電 - 改善後各季總和)
+                old_kwh_fan = kw_base * (s_spring['時數(hr)'] + s_summer['時數(hr)'] + s_winter['時數(hr)'])
+                after_kwh_fan = spring_kwh + summer_kwh + winter_kwh
+                save_kwh_fan = old_kwh_fan - after_kwh_fan
+                
+                # 填入格子
+                table_after.cell(1, cur_c).text = f"{s_spring['負載率(%)']}%"
+                table_after.cell(2, cur_c).text = f"{s_summer['負載率(%)']}%"
+                table_after.cell(3, cur_c).text = f"{s_winter['負載率(%)']}%"
+                table_after.cell(4, cur_c).text = f"{s_spring['時數(hr)']:,.0f}"
+                table_after.cell(5, cur_c).text = f"{s_summer['時數(hr)']:,.0f}"
+                table_after.cell(6, cur_c).text = f"{s_winter['時數(hr)']:,.0f}"
+                table_after.cell(7, cur_c).text = f"{spring_kw:.1f}"
+                table_after.cell(8, cur_c).text = f"{summer_kw:.1f}"
+                table_after.cell(9, cur_c).text = f"{winter_kw:.1f}"
+                table_after.cell(10, cur_c).text = f"{spring_kwh:,.0f}"
+                table_after.cell(11, cur_c).text = f"{summer_kwh:,.0f}"
+                table_after.cell(12, cur_c).text = f"{winter_kwh:,.0f}"
+                table_after.cell(13, cur_c).text = f"{after_kwh_fan:,.0f}"
+                table_after.cell(14, cur_c).text = f"{save_kwh_fan:,.0f}"
+                table_after.cell(15, cur_c).text = f"{(kw_base * 0.15):.1f}" # 抑低需量估計
+                
+                # 累加總計
+                total_after_kwh += after_kwh_fan
+                total_save_kwh += save_kwh_fan
+                total_suppress_kw += (kw_base * 0.15)
+                
+                for r in range(1, 16): fix_cell_font(table_after.cell(r, cur_c))
+            col_ptr += f_count
+
+        # 4. 填寫合計與下方合併欄位
+        table_after.cell(0, num_cols-1).text = "合計"
+        # ... (中間各季加總可視需要補上)
+        table_after.cell(13, num_cols-1).text = f"{total_after_kwh:,.0f}"
+        table_after.cell(14, num_cols-1).text = f"{total_save_kwh:,.0f}"
+        table_after.cell(15, num_cols-1).text = f"{total_suppress_kw:.1f}"
+        for r in [0, 13, 14, 15]: fix_cell_font(table_after.cell(r, num_cols-1), is_bold=True)
+
+        # 合併底部的全寬欄位
+        for row_idx in range(16, 20):
+            merged_cell = table_after.cell(row_idx, 1).merge(table_after.cell(row_idx, num_cols-1))
+            if row_idx == 16: merged_cell.text = f"{(total_save_kwh * elec_val / 10000):.1f}"
+            elif row_idx == 17: merged_cell.text = f"{(total_save_kwh / (total_after_kwh + total_save_kwh) * 100):.1f}%"
+            elif row_idx == 18: merged_cell.text = "6%"
+            elif row_idx == 19: merged_cell.text = f"{elec_val:.2f}"
+            fix_cell_font(merged_cell, is_bold=True)
         # 合計欄
         table.cell(0, num_cols-1).text = "合計"
         table.cell(3, num_cols-1).text = f"{s_kw:.1f}"
