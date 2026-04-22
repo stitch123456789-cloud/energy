@@ -33,20 +33,36 @@ def fix_cell_font(cell, size=12, is_bold=False):
             run.font.bold = is_bold
             run.font.color.rgb = RGBColor(0, 0, 0)
 
-def safe_replace_logic(doc, data_map):
-    """暴力替換：確保碎裂標籤一定能換掉，並維持樣式"""
+def safe_replace(doc, data_map):
+    # 處理一般段落
     for p in doc.paragraphs:
         full_text = "".join(run.text for run in p.runs)
         for key, val in data_map.items():
             if key in full_text:
                 full_text = full_text.replace(key, str(val))
-                p.clear()
-                run = p.add_run(full_text)
-                run.font.name = '標楷體'
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                run.font.size = Pt(12)
-                run.font.color.rgb = RGBColor(0, 0, 0)
+                p.clear() # 這是關鍵：清空舊的碎裂區塊
+                new_run = p.add_run(full_text) # 重新寫入整行
+                # 強制格式
+                new_run.font.name = '標楷體'
+                new_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                new_run.font.size = Pt(12)
+                new_run.font.color.rgb = RGBColor(0, 0, 0)
 
+    # 處理原本就有的表格 (如看板)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    full_text = "".join(run.text for run in p.runs)
+                    for key, val in data_map.items():
+                        if key in full_text:
+                            full_text = full_text.replace(key, str(val))
+                            p.text = full_text # 這裡直接替換文字
+                            # 補格式
+                            for run in p.runs:
+                                run.font.name = '標楷體'
+                                run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                                run.font.color.rgb = RGBColor(0, 0, 0)
 # --- 2. Streamlit 介面設計 ---
 st.title("🌀 P5. 冷卻水塔風車變頻專業分析")
 
@@ -113,13 +129,23 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
         # 2. 處理 Word
         doc = Document("template_p5.docx")
         
+       # 計算總馬力連動投資額
+        total_hp = sum(t['hp'] * t['fans'] for t in st.session_state.towers)
+        calc_invest = total_hp * 1.3  # 1.3萬/HP
+
         data_map = {
-            "{{UN}}": unit_name, "{{COUNT}}": str(len(st.session_state.towers)),
-            "{{CH_INFO}}": ch_info, "{{RT_INFO}}": rt_info,
-            "{{OLD_KWH}}": f"{total_old_kwh:,.0f}", "{{SAVE_KWH}}": f"{save_kwh:,.0f}",
-            "{{SAVE_MONEY}}": f"{save_money:.2f}", "{{INVEST}}": f"{auto_invest:.1f}",
-            "{{PAYBACK}}": f"{payback:.1f}", "{{MT}}": f"{motor_hp}hp",
-            "{{ON}}": setup_note, "{{MOTOR_SPEC}}": f"{motor_hp}HP x {int(total_hp/motor_hp)}台",
+            "{{UN}}": unit_name,
+            "{{COUNT}}": str(len(st.session_state.towers)),
+            "{{CH_INFO}}": ch_info,
+            "{{RT_INFO}}": rt_info,
+            "{{MT}}": f"{motor_hp}hp",  # 修正：補上馬力標籤
+            "{{ON}}": setup_note,       # 修正：補上運轉說明
+            "{{OLD_KWH}}": f"{results['old_total']:,.0f}",
+            "{{SAVE_KWH}}": f"{results['save_kwh']:,.0f}",
+            "{{MOTOR_SPEC}}": f"{motor_hp}HP x {int(total_hp/motor_hp)}台",
+            "{{SAVE_MONEY}}": f"{results['save_money']:.2f}",
+            "{{INVEST}}": f"{calc_invest:.1f}", # 修正：連動投資額
+            "{{PAYBACK}}": f"{(calc_invest/results['save_money'] if results['save_money']>0 else 0):.1f}",
             "{{SUPPRESS_KW}}": "13"
         }
         
@@ -169,10 +195,15 @@ if st.button("🚀 生成專業效益報告", use_container_width=True):
             col_ptr += f_count
 
         # 合計欄
+       # 在寫完每一台數據後，寫入最後一欄 (合計)
+        # num_cols - 1 是最後一列
         table.cell(0, num_cols-1).text = "合計"
-        table.cell(3, num_cols-1).text = f"{s_kw:.1f}"
-        table.cell(6, num_cols-1).text = f"{s_kwh:,.0f}"
-        for r in [0, 3, 6]: fix_cell_font(table.cell(r, num_cols-1), is_bold=True)
+        table.cell(3, num_cols-1).text = f"{(total_hp * 0.746):.1f}" # 總 kW
+        table.cell(6, num_cols-1).text = f"{results['old_total']:,.0f}" # 總耗電
+        
+        # 記得跑一次字體修正
+        for r in [0, 3, 6]:
+            fix_cell_font(table.cell(r, num_cols-1), is_bold=True)
 
         buf = io.BytesIO()
         doc.save(buf)
